@@ -39,12 +39,11 @@ def set_motor_speed(speed, direction):
         pwm2.ChangeDutyCycle(0)  # Stop motor
 
 # Rotate motor clockwise at 50% speed
-set_motor_speed(50, "clockwise")
-time.sleep(3)
-
-# Rotate motor counterclockwise at 75% speed
-set_motor_speed(75, "counterclockwise")
-time.sleep(3)
+for i in range (0, 150):    
+    set_motor_speed(40, "counterclockwise")
+    time.sleep(0.03)
+    set_motor_speed(25, "counterclockwise")
+    time.sleep(0.03)
 
 # Stop the motor
 set_motor_speed(0, "stop")

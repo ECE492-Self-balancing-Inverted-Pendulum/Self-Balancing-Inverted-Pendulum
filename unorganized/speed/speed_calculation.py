@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 import time
+import math
 
 # Use BCM pin numbering
 GPIO.setmode(GPIO.BCM)
@@ -11,6 +12,14 @@ IN2 = 19  # Motor direction and PWM speed control
 # Encoder Pins (Quadrature A & B)
 ENCODER_A = 17
 ENCODER_B = 27
+
+# Motor Specifications
+V_MOTOR = 6.8  # Motor operating voltage (V)
+I_MAX = 2.0    # Max motor current, measured from regulator
+
+# Wheel/Tire Specifications
+WHEEL_DIAMETER = 0.11  # Wheel diameter in meters (11 cm)
+CPR = 1024  # Encoder Cycles Per Revolution (modify as per your encoder)
 
 # Set up GPIOs as output for motor
 GPIO.setup(IN1, GPIO.OUT)
@@ -31,11 +40,10 @@ pwm2.start(0)
 # Variables for encoder
 encoder_pulse_count = 0
 last_encoder_state = 0
-CPR = 500  # Encoder Cycles Per Revolution (modify as per your EM1 model)
 
 # Interrupt callback for encoder counting
 def encoder_callback(channel):
-    global encoder_pulse_count, last_encoder_state
+    global encoder_pulse_count
 
     a_state = GPIO.input(ENCODER_A)
     b_state = GPIO.input(ENCODER_B)
@@ -47,7 +55,29 @@ def encoder_callback(channel):
         encoder_pulse_count -= 1  # Counterclockwise
 
 # Attach interrupt for Encoder A signal
-GPIO.add_event_detect(ENCODER_A, GPIO.BOTH, callback=encoder_callback)
+GPIO.add_event_detect(ENCODER_A, GPIO.RISING, callback=encoder_callback)
+
+# Function to estimate mean output current
+def estimate_mean_current(duty_cycle):
+    """
+    Estimates the mean output current based on duty cycle and motor max current.
+    Formula: I_mean = I_max * (duty_cycle / 100)
+    """
+    return I_MAX * (duty_cycle / 100)
+
+# Function to convert RPM to Speed (m/s and km/h)
+def rpm_to_speed(rpm, wheel_diameter=WHEEL_DIAMETER):
+    """
+    Converts RPM to linear speed in meters per second (m/s) and kilometers per hour (km/h).
+
+    :param rpm: Rotations per minute (RPM)
+    :param wheel_diameter: Diameter of the wheel in meters (default = 0.11m for 11 cm tire)
+    :return: Tuple (speed_mps, speed_kph)
+    """
+    radius = wheel_diameter / 2  # Convert diameter to radius (m)
+    speed_mps = (2 * math.pi * radius * rpm) / 60  # Speed in meters per second
+    speed_kph = speed_mps * 3.6  # Convert to km/h
+    return speed_mps, speed_kph
 
 # Function to set motor speed and direction
 def set_motor_speed(speed, direction):
@@ -75,15 +105,17 @@ def calculate_rpm():
     rpm = (pulses / CPR) * 60  # Convert pulses to RPM
     return rpm
 
-# Rotate motor and measure RPM
+# Rotate motor and measure RPM, Speed & Current
 try:
     print("Motor running clockwise at 50% speed")
     set_motor_speed(50, "clockwise")
     
-    for _ in range(5):  # Measure RPM for 5 seconds
+    for _ in range(5):  # Measure for 5 seconds
         time.sleep(1)
         rpm = calculate_rpm()
-        print(f"RPM: {rpm}")
+        speed_mps, speed_kph = rpm_to_speed(rpm)
+        mean_current = estimate_mean_current(50)
+        print(f"RPM: {rpm}, Speed: {speed_mps:.2f} m/s ({speed_kph:.2f} km/h), Estimated Current: {mean_current:.2f} A")
 
     print("Motor running counterclockwise at 75% speed")
     set_motor_speed(75, "counterclockwise")
@@ -91,7 +123,9 @@ try:
     for _ in range(5):
         time.sleep(1)
         rpm = calculate_rpm()
-        print(f"RPM: {rpm}")
+        speed_mps, speed_kph = rpm_to_speed(rpm)
+        mean_current = estimate_mean_current(75)
+        print(f"RPM: {rpm}, Speed: {speed_mps:.2f} m/s ({speed_kph:.2f} km/h), Estimated Current: {mean_current:.2f} A")
 
     # Stop the motor
     print("Stopping motor")
