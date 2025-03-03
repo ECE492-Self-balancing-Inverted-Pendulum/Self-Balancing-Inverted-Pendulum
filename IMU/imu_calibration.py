@@ -50,4 +50,3 @@ with open("calibration.json", "w") as f:
 
 print("\nCalibration complete! Values saved to calibration.json")
 print(json.dumps(calibration_data, indent=4))
-
