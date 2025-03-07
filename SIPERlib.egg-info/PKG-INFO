@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: SIPERlib
+Version: 0.1
+Summary: A simple motor control package using Raspberry Pi GPIO
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent

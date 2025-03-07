@@ -1,0 +1,9 @@
+README.txt
+setup.py
+SIPERlib/__init__.py
+SIPERlib/encoder.py
+SIPERlib/motorDriver.py
+lib.egg-info/PKG-INFO
+lib.egg-info/SOURCES.txt
+lib.egg-info/dependency_links.txt
+lib.egg-info/top_level.txt

@@ -1,13 +1,13 @@
 import time
 import threading
 import RPi.GPIO as GPIO
-from lib.motorDriver import MotorControl
+from SIPERlib.motorDriver import MotorControl
 
 # Define motor control pins
 IN1 = 13  # Motor direction and PWM speed control
 IN2 = 19  # Motor direction and PWM speed control
-ENCODER_A = 17  # Encoder signal A input
-ENCODER_B = 27  # Encoder signal B input
+ENCODER_A = 23  # Encoder signal A input
+ENCODER_B = 24  # Encoder signal B input
 
 # Encoder configuration
 GPIO.setmode(GPIO.BCM)
