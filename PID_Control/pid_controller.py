@@ -21,6 +21,11 @@ class PIDController:
         self.integral = 0.0
         self.prev_time = time.time()
         
+        # Variables for debug
+        self.p_term = 0.0
+        self.i_term = 0.0
+        self.d_term = 0.0
+        
     def compute(self, current_value, angular_velocity, dt):
         """
         Compute PID control value based on current value and time delta.
@@ -40,6 +45,12 @@ class PIDController:
         p_term = self.kp * error
         
         # I term - accumulated error over time
+        # Increase responsiveness by reducing integral when error changes sign
+        if error * self.prev_error < 0:  # Error changed direction
+            # Reset part of the integral to reduce overshoot when crossing the setpoint
+            self.integral *= 0.5
+            
+        # Add to integral
         self.integral += error * dt
         
         # Limit integral term to prevent windup
@@ -50,6 +61,10 @@ class PIDController:
         # Using angular velocity directly from IMU instead of calculating derivative
         # as it provides a cleaner signal
         d_term = -self.kd * angular_velocity  # Negative because we want to counter the rotation
+        
+        # Weighing D term more when angular velocity is high improves responsiveness
+        if abs(angular_velocity) > 10:  # If angular velocity is significant
+            d_term *= 1.2  # Increase influence of D term
         
         # Calculate total output
         output = p_term + i_term + d_term
@@ -69,11 +84,14 @@ class PIDController:
         self.prev_error = 0.0
         self.integral = 0.0
         self.prev_time = time.time()
+        self.p_term = 0.0
+        self.i_term = 0.0
+        self.d_term = 0.0
         
     def get_debug_info(self):
         """Return debug information about PID components."""
         return {
-            'p_term': getattr(self, 'p_term', 0),
-            'i_term': getattr(self, 'i_term', 0),
-            'd_term': getattr(self, 'd_term', 0)
+            'p_term': self.p_term,
+            'i_term': self.i_term,
+            'd_term': self.d_term
         } 

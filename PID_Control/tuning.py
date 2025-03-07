@@ -1,3 +1,6 @@
+import sys
+import config
+
 class PIDTuner:
     """
     Interface for tuning PID parameters interactively.
@@ -11,6 +14,13 @@ class PIDTuner:
             config_dict: Dictionary containing PID and other parameters
         """
         self.config = config_dict
+    
+    def save_changes(self):
+        """
+        Save current configuration to file.
+        """
+        config.save_config(self.config)
+        print("Changes have been saved to the configuration file.")
     
     def tune_parameters(self):
         """
@@ -41,6 +51,9 @@ class PIDTuner:
         print("\nUpdated PID Parameters:")
         for key, value in self.config.items():
             print(f"{key}: {value}")
+            
+        # Save changes to config file
+        self.save_changes()
         
         input("\nPress Enter to continue...")
         
@@ -83,6 +96,38 @@ class PIDTuner:
             if key in self.config:
                 print(f"{key}: {self.config[key]}")
         
+        # Save changes to config file
+        self.save_changes()
+        
         input("\nPress Enter to continue...")
         
-        return self.config 
+        return self.config
+        
+    def tune_parameter_runtime(self, parameter, value):
+        """
+        Tune a single parameter during runtime.
+        
+        Args:
+            parameter: Name of the parameter to tune
+            value: New value for the parameter
+            
+        Returns:
+            Updated configuration dictionary
+        """
+        if parameter in self.config:
+            try:
+                # Convert to the same type as the current value
+                if isinstance(self.config[parameter], float):
+                    self.config[parameter] = float(value)
+                elif isinstance(self.config[parameter], int):
+                    self.config[parameter] = int(value)
+                
+                # Save changes to config file
+                self.save_changes()
+                return True
+            except ValueError:
+                print(f"Invalid value for {parameter}")
+                return False
+        else:
+            print(f"Parameter {parameter} not found in configuration")
+            return False 

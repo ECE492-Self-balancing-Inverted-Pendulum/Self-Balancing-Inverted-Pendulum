@@ -13,18 +13,43 @@ class IMUReader:
     ACCEL_OFFSET_Y = -0.14494018010253898
     ACCEL_OFFSET_Z = 0.46995493779295927
 
-    # Low-Pass Filter Alpha (0 < ALPHA < 1, lower = smoother, slower updates)
-    ALPHA = 0.1
+    # Default Low-Pass Filter Alpha values
+    # Higher values = more responsive but more noise
+    # Lower values = smoother but slower updates
+    DEFAULT_ALPHA = 0.2  # Increased from 0.1 for better responsiveness
 
-    def __init__(self):
+    def __init__(self, alpha=None):
         """
         Initializes the IMU sensor and sets the starting pitch reference.
+        
+        Args:
+            alpha: Optional low-pass filter coefficient (0 < alpha < 1)
+                 Higher = more responsive, Lower = smoother
         """
         self.i2c = board.I2C()  # Setup I2C communication
         self.imu = adafruit_icm20x.ICM20948(self.i2c)  # Initialize IMU sensor
+        
+        # Set alpha for filter responsiveness
+        self.ALPHA = alpha if alpha is not None else self.DEFAULT_ALPHA
 
         # First reading (initialize with actual IMU position)
         self.pitch, self.angular_velocity = self._get_initial_reading()
+        
+    def set_alpha(self, alpha):
+        """
+        Update the low-pass filter alpha value to change responsiveness.
+        
+        Args:
+            alpha: New filter coefficient (0 < alpha < 1)
+                 Higher = more responsive, Lower = smoother
+        """
+        if 0 < alpha < 1:
+            self.ALPHA = alpha
+            print(f"IMU filter alpha set to {alpha:.2f}")
+            return True
+        else:
+            print(f"Invalid alpha value: {alpha}. Must be between 0 and 1.")
+            return False
 
     def _get_initial_reading(self):
         """
@@ -63,6 +88,7 @@ class IMUReader:
         pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * (180 / math.pi)
 
         # Apply low-pass filter to stabilize pitch readings
+        # Higher alpha makes the system more responsive to changes
         self.pitch = self.ALPHA * pitch + (1 - self.ALPHA) * self.pitch
         self.angular_velocity = self.ALPHA * gyro_y + (1 - self.ALPHA) * self.angular_velocity
 

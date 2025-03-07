@@ -21,6 +21,7 @@ class BalanceController:
         self.config = config
         self.pid = PIDController(config)
         self.running = False
+        self.last_direction = None
         
     def apply_motor_control(self, output):
         """
@@ -38,9 +39,9 @@ class BalanceController:
         # Calculate absolute motor speed
         speed = abs(output)
         
-        # Apply deadband compensation
+        # Apply deadband compensation with reduced delay for direction changes
         if speed < self.config['MOTOR_DEADBAND']:
-            if speed < self.config['MOTOR_DEADBAND'] / 2:
+            if speed < self.config['MOTOR_DEADBAND'] / 3:  # Reduced threshold for better responsiveness
                 # If speed is significantly below deadband, just stop
                 self.motor.stop_motor()
                 return 0, "stopped"
@@ -48,11 +49,22 @@ class BalanceController:
                 # If speed is close to deadband, set it to minimum effective speed
                 speed = self.config['MOTOR_DEADBAND']
         
+        # Direction change boost - apply extra power momentarily when changing directions
+        # to improve responsiveness of the system
+        if self.last_direction is not None and direction != self.last_direction and direction != "stopped":
+            # Boost the speed by 20% when changing directions to overcome inertia
+            # but don't exceed maximum speed
+            speed = min(speed * 1.2, self.config['MAX_MOTOR_SPEED'])
+        
         # Cap speed at maximum
         speed = min(speed, self.config['MAX_MOTOR_SPEED'])
         
         # Apply to motor
         self.motor.set_motor_speed(speed, direction)
+        
+        # Store direction for next call
+        if direction != "stopped":
+            self.last_direction = direction
         
         return speed, direction
     
@@ -69,6 +81,7 @@ class BalanceController:
         
         # Reset PID controller
         self.pid.reset()
+        self.last_direction = None
         
         # Initial time for loop timing
         last_time = time.time()
