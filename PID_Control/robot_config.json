@@ -1,0 +1,13 @@
+{
+    "P_GAIN": 15.0,
+    "I_GAIN": 0.1,
+    "D_GAIN": 1.0,
+    "MAX_I_TERM": 20,
+    "SETPOINT": 0.0,
+    "MOTOR_DEADBAND": 60,
+    "MAX_MOTOR_SPEED": 100,
+    "SAFE_TILT_LIMIT": 71,
+    "SAMPLE_TIME": 0.01,
+    "IN1_PIN": 13,
+    "IN2_PIN": 19
+}
