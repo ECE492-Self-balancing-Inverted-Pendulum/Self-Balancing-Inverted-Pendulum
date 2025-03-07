@@ -88,6 +88,7 @@ try:
 
         time.sleep(1 / SAMPLE_RATE)  # Maintain sampling rate
 
+        #time.sleep(1)  # Maintain sampling rate
 except KeyboardInterrupt:
     print("\nExiting IMU Fusion Program...")
 

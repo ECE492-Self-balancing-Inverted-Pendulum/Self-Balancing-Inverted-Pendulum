@@ -36,10 +36,10 @@ SAMPLE_RATE = 100  # Hz
 offset = imufusion.Offset(SAMPLE_RATE)
 ahrs = imufusion.Ahrs()
 
-# Set Madgwick filter parameters
+# Set Madgwick filter parameters (Lower gain for smoother response)
 ahrs.settings = imufusion.Settings(
     imufusion.CONVENTION_NWU,  # North-West-Up (NWU) convention
-    0.5,  # Gain (higher = faster, noisier)
+    0.2,  # **Reduced gain for better stability**
     2000,  # Gyroscope range (deg/s)
     10,  # Acceleration rejection threshold
     10,  # Magnetic rejection threshold
@@ -60,22 +60,29 @@ try:
     while True:
         # Read IMU raw data
         accel = np.array(icm.acceleration) - accel_offset  # Apply calibration
-        gyro = np.array(icm.gyro) * 180 / np.pi - gyro_offset  # Convert rad/s → deg/s & Apply calibration
+        gyro = np.array(icm.gyro) * (180 / np.pi) - gyro_offset  # Convert rad/s → deg/s & Apply calibration
         mag = np.array(icm.magnetic) - mag_offset  # Apply calibration
+
+        # Prevent acceleration fluctuations (Clamp values between -9.81 and 9.81 m/s²)
+        accel = np.clip(accel, -9.81, 9.81)
+
+        # Apply low-pass filter to gyro (reduces high-frequency noise)
+        alpha = 0.8  # Adjustable smoothing factor (0.5 - 0.9 works well)
+        gyro = alpha * gyro + (1 - alpha) * offset.update(gyro)
 
         # Get time delta
         curr_time = time.time()
-        dt = curr_time - prev_time
+        dt = max(curr_time - prev_time, 1e-3)  # Prevent division by zero if dt is too small
         prev_time = curr_time
-
-        # Apply offset correction to gyroscope
-        gyro = offset.update(gyro)
 
         # Apply Madgwick filter
         ahrs.update(gyro, accel, mag, dt)
 
         # Get Euler angles (Roll, Pitch, Yaw)
         euler = ahrs.quaternion.to_euler()
+
+        # Prevent unstable values (Clamp angles within reasonable limits)
+        euler = np.clip(euler, -180, 180)
 
         # Log data to CSV
         csv_writer.writerow([curr_time, euler[0], euler[1], euler[2]])
