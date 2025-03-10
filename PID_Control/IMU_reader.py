@@ -6,6 +6,7 @@ import math
 class IMUReader:
     """
     A class for reading and filtering IMU data from the ICM-20948 sensor.
+    Handles inverted (upside-down) mounting of the IMU.
     """
 
     # Calibration offsets for the accelerometer
@@ -18,19 +19,28 @@ class IMUReader:
     # Lower values = smoother but slower updates
     DEFAULT_ALPHA = 0.2  # Increased from 0.1 for better responsiveness
 
-    def __init__(self, alpha=None):
+    # Flag to indicate IMU is mounted upside down
+    MOUNTED_UPSIDE_DOWN = True
+
+    def __init__(self, alpha=None, upside_down=True):
         """
         Initializes the IMU sensor and sets the starting pitch reference.
         
         Args:
             alpha: Optional low-pass filter coefficient (0 < alpha < 1)
                  Higher = more responsive, Lower = smoother
+            upside_down: Whether the IMU is mounted upside-down
         """
         self.i2c = board.I2C()  # Setup I2C communication
         self.imu = adafruit_icm20x.ICM20948(self.i2c)  # Initialize IMU sensor
         
         # Set alpha for filter responsiveness
         self.ALPHA = alpha if alpha is not None else self.DEFAULT_ALPHA
+        # Set mounting orientation
+        self.MOUNTED_UPSIDE_DOWN = upside_down
+        
+        if self.MOUNTED_UPSIDE_DOWN:
+            print("IMU configured for upside-down mounting.")
 
         # First reading (initialize with actual IMU position)
         self.pitch, self.angular_velocity = self._get_initial_reading()
@@ -59,10 +69,18 @@ class IMUReader:
         accel_x, accel_y, accel_z = self.imu.acceleration
         gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
 
-        # Apply calibration offsets
-        accel_x -= self.ACCEL_OFFSET_X
-        accel_y -= self.ACCEL_OFFSET_Y
-        accel_z -= self.ACCEL_OFFSET_Z
+        # Handle calibration offsets based on IMU orientation
+        if self.MOUNTED_UPSIDE_DOWN:
+            # For upside-down mounting, invert X and Z axes first, then apply inverted offsets
+            accel_x = -accel_x - self.ACCEL_OFFSET_X
+            accel_y = accel_y - self.ACCEL_OFFSET_Y
+            accel_z = -accel_z - self.ACCEL_OFFSET_Z
+            gyro_y = -gyro_y
+        else:
+            # Normal mounting - apply offsets normally
+            accel_x -= self.ACCEL_OFFSET_X
+            accel_y -= self.ACCEL_OFFSET_Y
+            accel_z -= self.ACCEL_OFFSET_Z
 
         # Compute initial pitch angle
         initial_pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * (180 / math.pi)
@@ -72,6 +90,7 @@ class IMUReader:
     def get_imu_data(self):
         """
         Reads IMU data, applies calibration and filtering, and returns processed values.
+        Accounts for the IMU being mounted upside-down.
 
         :return: A dictionary with pitch and angular velocity.
         """
@@ -79,10 +98,18 @@ class IMUReader:
         accel_x, accel_y, accel_z = self.imu.acceleration
         gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
 
-        # Apply calibration offsets
-        accel_x -= self.ACCEL_OFFSET_X
-        accel_y -= self.ACCEL_OFFSET_Y
-        accel_z -= self.ACCEL_OFFSET_Z
+        # Handle calibration offsets based on IMU orientation
+        if self.MOUNTED_UPSIDE_DOWN:
+            # For upside-down mounting, invert X and Z axes first, then apply inverted offsets
+            accel_x = -accel_x - self.ACCEL_OFFSET_X
+            accel_y = accel_y - self.ACCEL_OFFSET_Y
+            accel_z = -accel_z - self.ACCEL_OFFSET_Z
+            gyro_y = -gyro_y
+        else:
+            # Normal mounting - apply offsets normally
+            accel_x -= self.ACCEL_OFFSET_X
+            accel_y -= self.ACCEL_OFFSET_Y
+            accel_z -= self.ACCEL_OFFSET_Z
 
         # Compute pitch angle from accelerometer (degrees)
         pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * (180 / math.pi)
@@ -104,6 +131,8 @@ class IMUReader:
         :param delay: Time delay between readings (default: 0.1s).
         """
         try:
+            print(f"IMU Orientation: {'Upside Down' if self.MOUNTED_UPSIDE_DOWN else 'Normal'}")
+            print(f"Accel Offsets: X={self.ACCEL_OFFSET_X}, Y={self.ACCEL_OFFSET_Y}, Z={self.ACCEL_OFFSET_Z}")
             while True:
                 imu_data = self.get_imu_data()
                 print(f"Pitch: {imu_data['pitch']:.2f}° | "
@@ -114,6 +143,6 @@ class IMUReader:
 
 # Example usage
 if __name__ == "__main__":
-    imu_reader = IMUReader()
+    imu_reader = IMUReader(upside_down=True)
     imu_reader.print_imu_data()
 

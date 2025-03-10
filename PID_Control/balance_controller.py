@@ -1,10 +1,12 @@
 import time
 from pid_controller import PIDController
+from motorController import MotorControl, DualMotorControl
 
 class BalanceController:
     """
     Controller for self-balancing robot that uses PID control.
     Handles the interaction between sensors, PID algorithm, and motor control.
+    Supports both single motor and dual motor configurations.
     """
     
     def __init__(self, imu, motor, config):
@@ -13,7 +15,7 @@ class BalanceController:
         
         Args:
             imu: IMU reader object
-            motor: Motor controller object
+            motor: Motor controller object (either MotorControl or DualMotorControl)
             config: Configuration dictionary
         """
         self.imu = imu
@@ -22,6 +24,13 @@ class BalanceController:
         self.pid = PIDController(config)
         self.running = False
         self.last_direction = None
+        
+        # Determine if we're using dual motors
+        self.using_dual_motors = isinstance(self.motor, DualMotorControl)
+        if self.using_dual_motors:
+            print("Balance controller configured with dual motors")
+        else:
+            print("Balance controller configured with single motor")
         
     def apply_motor_control(self, output):
         """
@@ -43,7 +52,10 @@ class BalanceController:
         if speed < self.config['MOTOR_DEADBAND']:
             if speed < self.config['MOTOR_DEADBAND'] / 3:  # Reduced threshold for better responsiveness
                 # If speed is significantly below deadband, just stop
-                self.motor.stop_motor()
+                if self.using_dual_motors:
+                    self.motor.stop_motors()
+                else:
+                    self.motor.stop_motor()
                 return 0, "stopped"
             else:
                 # If speed is close to deadband, set it to minimum effective speed
@@ -59,8 +71,11 @@ class BalanceController:
         # Cap speed at maximum
         speed = min(speed, self.config['MAX_MOTOR_SPEED'])
         
-        # Apply to motor
-        self.motor.set_motor_speed(speed, direction)
+        # Apply to motor(s)
+        if self.using_dual_motors:
+            self.motor.set_motors_speed(speed, direction)
+        else:
+            self.motor.set_motor_speed(speed, direction)
         
         # Store direction for next call
         if direction != "stopped":
