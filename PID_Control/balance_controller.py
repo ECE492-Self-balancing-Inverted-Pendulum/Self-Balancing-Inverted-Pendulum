@@ -116,17 +116,20 @@ class BalanceController:
                 
                 # Get IMU data
                 imu_data = self.imu.get_imu_data()
-                pitch = imu_data['pitch']
+                roll = imu_data['roll']
                 angular_velocity = imu_data['angular_velocity']
                 
                 # Safety check - stop if tilt is too extreme
-                if abs(pitch) > self.config['SAFE_TILT_LIMIT']:
-                    print(f"⚠️ Safety cutoff: Tilt {pitch:.2f}° exceeds limit of {self.config['SAFE_TILT_LIMIT']}°")
-                    self.motor.stop_motor()
+                if abs(roll) > self.config['SAFE_TILT_LIMIT']:
+                    print(f"⚠️ Safety cutoff: Tilt {roll:.2f}° exceeds limit of {self.config['SAFE_TILT_LIMIT']}°")
+                    if self.using_dual_motors:
+                        self.motor.stop_motors()
+                    else:
+                        self.motor.stop_motor()
                     break
                 
                 # Compute PID output
-                output = self.pid.compute(pitch, angular_velocity, dt)
+                output = self.pid.compute(roll, angular_velocity, dt)
                 
                 # Apply motor control
                 speed, direction = self.apply_motor_control(output)
@@ -134,7 +137,7 @@ class BalanceController:
                 # Create debug info
                 debug_info = {
                     'time': current_time,
-                    'pitch': pitch,
+                    'roll': roll,
                     'angular_velocity': angular_velocity,
                     'output': output,
                     'speed': speed,
@@ -144,7 +147,7 @@ class BalanceController:
                 
                 # Debug info - print every 0.5 seconds
                 if int(current_time * 2) != int(last_time * 2):
-                    print(f"Pitch: {pitch:.2f}° | AngVel: {angular_velocity:.2f}°/s | "
+                    print(f"Roll: {roll:.2f}° | AngVel: {angular_velocity:.2f}°/s | "
                           f"Output: {output:.1f} | Motor: {speed:.0f}% {direction}")
                 
                 # Call debug callback if provided
@@ -163,5 +166,8 @@ class BalanceController:
     def stop_balancing(self):
         """Stop the balancing control loop."""
         self.running = False
-        self.motor.stop_motor()
+        if self.using_dual_motors:
+            self.motor.stop_motors()
+        else:
+            self.motor.stop_motor()
         print("Motor stopped. Balance mode exited.") 

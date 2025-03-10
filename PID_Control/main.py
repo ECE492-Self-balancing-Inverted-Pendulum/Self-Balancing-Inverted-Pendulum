@@ -20,7 +20,7 @@ def manual_mode(motor, imu):
     print("\n🚀 Manual Control Mode!")
     print("W: Run Motor(s) Forward (100%)")
     print("S: Run Motor(s) Reverse (100%)")
-    print("I: Get IMU Data (Pitch & Angular Velocity)")
+    print("I: Get IMU Data (Roll & Angular Velocity)")
     print("Q: Quit Program")
     print("-------------------------")
 
@@ -49,7 +49,7 @@ def manual_mode(motor, imu):
 
             elif command == "i":
                 imu_data = imu.get_imu_data()
-                print(f"Pitch: {imu_data['pitch']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                print(f"Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
 
             elif command == "q":
                 print("Stopping motor(s) and exiting...")
@@ -196,7 +196,7 @@ def imu_tuning_mode(imu):
             
             # Clear line and print data
             sys.stdout.write("\r\033[K")  # Clear line
-            sys.stdout.write(f"Pitch: {imu_data['pitch']:.2f}° | Angular Vel: {imu_data['angular_velocity']:.2f}°/s | Alpha: {imu.ALPHA:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+            sys.stdout.write(f"Roll: {imu_data['roll']:.2f}° | Angular Vel: {imu_data['angular_velocity']:.2f}°/s | Alpha: {imu.ALPHA:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
             sys.stdout.flush()
             
             # Check if key pressed

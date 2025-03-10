@@ -22,7 +22,7 @@ def main():
     print("\n🚀 Motor, IMU & Encoder Control Started!")
     print("W: Run Motor Forward (100%)")
     print("S: Run Motor Reverse (100%)")
-    print("I: Get IMU Data (Pitch & Angular Velocity)")
+    print("I: Get IMU Data (Roll & Angular Velocity)")
     print("E: Measure RPM from Encoder")
     print("Q: Quit Program")
     print("-------------------------")
@@ -41,7 +41,7 @@ def main():
 
             elif command == "i":
                 imu_data = imu.get_imu_data()
-                print(f"Pitch: {imu_data['pitch']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                print(f"Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
 
             elif command == "e":
                 rpm = encoder.measure_rpm(duration=1)  # Measure RPM for 1 second

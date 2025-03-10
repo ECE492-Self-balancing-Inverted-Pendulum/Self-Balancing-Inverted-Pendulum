@@ -24,7 +24,7 @@ class IMUReader:
 
     def __init__(self, alpha=None, upside_down=True):
         """
-        Initializes the IMU sensor and sets the starting pitch reference.
+        Initializes the IMU sensor and sets the starting roll reference.
         
         Args:
             alpha: Optional low-pass filter coefficient (0 < alpha < 1)
@@ -43,7 +43,7 @@ class IMUReader:
             print("IMU configured for upside-down mounting.")
 
         # First reading (initialize with actual IMU position)
-        self.pitch, self.angular_velocity = self._get_initial_reading()
+        self.roll, self.angular_velocity = self._get_initial_reading()
         
     def set_alpha(self, alpha):
         """
@@ -64,35 +64,33 @@ class IMUReader:
     def _get_initial_reading(self):
         """
         Gets the first IMU reading and sets it as the initial reference.
-        :return: Initial pitch and angular velocity values.
+        :return: Initial roll and angular velocity values.
         """
         accel_x, accel_y, accel_z = self.imu.acceleration
         gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
 
         # Handle calibration offsets based on IMU orientation
         if self.MOUNTED_UPSIDE_DOWN:
-            # For upside-down mounting, invert X and Z axes first, then apply inverted offsets
-            accel_x = -accel_x - self.ACCEL_OFFSET_X
-            accel_y = accel_y - self.ACCEL_OFFSET_Y
+            # For upside-down mounting, invert Y and Z axes
+            accel_y = -accel_y - self.ACCEL_OFFSET_Y
             accel_z = -accel_z - self.ACCEL_OFFSET_Z
-            gyro_y = -gyro_y
+            gyro_x = -gyro_x
         else:
             # Normal mounting - apply offsets normally
-            accel_x -= self.ACCEL_OFFSET_X
             accel_y -= self.ACCEL_OFFSET_Y
             accel_z -= self.ACCEL_OFFSET_Z
 
-        # Compute initial pitch angle
-        initial_pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * (180 / math.pi)
+        # Compute initial roll angle
+        initial_roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
 
-        return initial_pitch, gyro_y  # Initialize angular velocity as first reading
+        return initial_roll, gyro_x  # Initialize angular velocity with X-axis rotation
 
     def get_imu_data(self):
         """
         Reads IMU data, applies calibration and filtering, and returns processed values.
         Accounts for the IMU being mounted upside-down.
 
-        :return: A dictionary with pitch and angular velocity.
+        :return: A dictionary with roll and angular velocity.
         """
         # Read raw IMU values
         accel_x, accel_y, accel_z = self.imu.acceleration
@@ -100,27 +98,24 @@ class IMUReader:
 
         # Handle calibration offsets based on IMU orientation
         if self.MOUNTED_UPSIDE_DOWN:
-            # For upside-down mounting, invert X and Z axes first, then apply inverted offsets
-            accel_x = -accel_x - self.ACCEL_OFFSET_X
-            accel_y = accel_y - self.ACCEL_OFFSET_Y
+            # For upside-down mounting, invert Y and Z axes
+            accel_y = -accel_y - self.ACCEL_OFFSET_Y
             accel_z = -accel_z - self.ACCEL_OFFSET_Z
-            gyro_y = -gyro_y
+            gyro_x = -gyro_x
         else:
             # Normal mounting - apply offsets normally
-            accel_x -= self.ACCEL_OFFSET_X
             accel_y -= self.ACCEL_OFFSET_Y
             accel_z -= self.ACCEL_OFFSET_Z
 
-        # Compute pitch angle from accelerometer (degrees)
-        pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * (180 / math.pi)
+        # Compute roll angle from accelerometer (degrees)
+        roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
 
-        # Apply low-pass filter to stabilize pitch readings
-        # Higher alpha makes the system more responsive to changes
-        self.pitch = self.ALPHA * pitch + (1 - self.ALPHA) * self.pitch
-        self.angular_velocity = self.ALPHA * gyro_y + (1 - self.ALPHA) * self.angular_velocity
+        # Apply low-pass filter to stabilize roll readings
+        self.roll = self.ALPHA * roll + (1 - self.ALPHA) * self.roll
+        self.angular_velocity = self.ALPHA * gyro_x + (1 - self.ALPHA) * self.angular_velocity
 
         return {
-            "pitch": self.pitch,
+            "roll": self.roll,
             "angular_velocity": self.angular_velocity
         }
 
@@ -135,7 +130,7 @@ class IMUReader:
             print(f"Accel Offsets: X={self.ACCEL_OFFSET_X}, Y={self.ACCEL_OFFSET_Y}, Z={self.ACCEL_OFFSET_Z}")
             while True:
                 imu_data = self.get_imu_data()
-                print(f"Pitch: {imu_data['pitch']:.2f}° | "
+                print(f"Roll: {imu_data['roll']:.2f}° | "
                       f"Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
                 time.sleep(delay)
         except KeyboardInterrupt:
