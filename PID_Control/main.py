@@ -12,6 +12,7 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from pid_controller import PIDController
+import web_server
 
 def runtime_parameter_tuning(pid_tuner, balance_controller):
     """
@@ -31,12 +32,35 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     print("  B: Toggle parameter selection to direction change boost")
     print("  A: Toggle parameter selection to IMU filter alpha")
     print("  L: List all current parameters")
-    print("  S: Save current configuration")
-    print("  Q: Quit tuning mode")
+    print("  V: Save current configuration")
+    print("  Q: Return to Main Menu")
+    print("\nWeb Dashboard available at http://192.168.0.103:5000")
+    
+    # Start the web server
+    web_server.start_server(port=5000)
+    
+    # Create a debug callback function to send data to the web interface
+    def debug_callback(debug_info):
+        # Send data to the web interface
+        roll = debug_info['roll']
+        angular_velocity = debug_info['angular_velocity']
+        output = debug_info['output']
+        pid_info = debug_info['pid']
+        
+        web_server.add_data_point(
+            actual_angle=roll,
+            target_angle=0.0,  # Target is always 0 for balancing
+            pid_error=0.0 - roll,  # Error is target - actual
+            p_term=pid_info['p_term'],
+            i_term=pid_info['i_term'],
+            d_term=pid_info['d_term'],
+            pid_output=output
+        )
     
     # Start balancing in a separate thread
     balancing_thread = threading.Thread(
         target=balance_controller.start_balancing,
+        args=(debug_callback,),
         daemon=True
     )
     balancing_thread.start()
@@ -85,7 +109,19 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                 if key.lower() == 'q':
                     running = False
                     sys.stdout.write("\r\033[K")  # Clear line
-                    print("\nExiting tuning mode.")
+                    print("\nReturning to main menu.")
+                    # Stop the balancing thread
+                    balance_controller.running = False
+                    # Clean up before returning
+                    if balance_controller.using_dual_motors:
+                        balance_controller.motor.stop_motors()
+                    else:
+                        balance_controller.motor.stop_motor()
+                    # Restore terminal settings before exiting
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    # Stop the web server
+                    web_server.stop_server()
+                    return
                 
                 elif key.lower() == 'p':
                     current_param = "P_GAIN"
@@ -265,6 +301,10 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         balance_controller.stop_balancing()
         print("Stopping balancing...")
         balancing_thread.join(timeout=1.0)
+        
+        # Stop the web server
+        web_server.stop_server()
+        
         print("Runtime tuning exited.")
 
 def imu_tuning_mode(imu):
@@ -450,14 +490,43 @@ def main():
             print("2: Dual Motor Test")
             print("3: Tune All PID Parameters")
             print("4: Quick-Tune Core PID Parameters (P, I, D gains)")
-            print("5: Self-Balancing Mode with Runtime Parameter Tuning")
+            print("5: Self-Balancing Mode with Runtime Parameter Tuning & Web Dashboard")
             print("6: IMU Responsiveness Tuning")
             print("Q: Quit Program")
             
             choice = input("\nEnter choice: ").lower().strip()
             
             if choice == '1':
-                balance_controller.start_balancing()
+                # Define a debug callback function to send data to the web interface
+                def debug_callback(debug_info):
+                    # Send data to the web interface
+                    roll = debug_info['roll']
+                    angular_velocity = debug_info['angular_velocity']
+                    output = debug_info['output']
+                    pid_info = debug_info['pid']
+                    
+                    web_server.add_data_point(
+                        actual_angle=roll,
+                        target_angle=0.0,  # Target is always 0 for balancing
+                        pid_error=0.0 - roll,  # Error is target - actual
+                        p_term=pid_info['p_term'],
+                        i_term=pid_info['i_term'],
+                        d_term=pid_info['d_term'],
+                        pid_output=output
+                    )
+                
+                # Start the web server
+                print("\nStarting web dashboard...")
+                print("Web interface available at http://192.168.0.103:5000")
+                web_server.start_server(port=5000)
+                
+                try:
+                    # Start balancing with the debug callback
+                    balance_controller.start_balancing(debug_callback)
+                finally:
+                    # Stop the web server when balancing ends
+                    web_server.stop_server()
+                    
             elif choice == '2':
                 dual_motor_test(motors)
             elif choice == '3':
@@ -483,6 +552,7 @@ def main():
     finally:
         try:
             motors.cleanup()
+            web_server.stop_server()  # Ensure web server is stopped when exiting
         except:
             pass
         print("Goodbye!")

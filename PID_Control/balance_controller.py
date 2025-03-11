@@ -1,4 +1,8 @@
 import time
+import sys
+import select
+import termios
+import tty
 from pid_controller import PIDController
 from motorController import MotorControl, DualMotorControl
 
@@ -24,6 +28,7 @@ class BalanceController:
         self.pid = PIDController(config)
         self.running = False
         self.last_direction = None
+        self.enable_debug = True  # Enable debug output by default
         
         # Determine if we're using dual motors
         self.using_dual_motors = isinstance(self.motor, DualMotorControl)
@@ -93,7 +98,7 @@ class BalanceController:
             debug_callback: Optional function to call with debug information
         """
         print("\n🤖 Self-Balancing Mode Started!")
-        print("Press Ctrl+C to exit")
+        print("Press 'Q' to return to main menu")
         print("-------------------------")
         
         # Reset PID controller
@@ -104,8 +109,25 @@ class BalanceController:
         last_time = time.time()
         self.running = True
         
+        # Setup for non-blocking input detection
+        old_settings = None
+        if sys.stdin.isatty():
+            old_settings = termios.tcgetattr(sys.stdin)
+            tty.setraw(sys.stdin.fileno())
+        
+        # For tracking debug output timing
+        last_debug_time = 0
+        
         try:
             while self.running:
+                # Check for 'Q' keypress to exit
+                if sys.stdin.isatty() and select.select([sys.stdin], [], [], 0.0)[0]:
+                    key = sys.stdin.read(1)
+                    if key.lower() == 'q':
+                        print("\nReturning to main menu...")
+                        self.running = False
+                        break
+                
                 # Calculate time delta
                 current_time = time.time()
                 dt = current_time - last_time
@@ -147,23 +169,30 @@ class BalanceController:
                     'pid': self.pid.get_debug_info(),
                 }
                 
-                # Debug info - print every 0.5 seconds
-                if int(current_time * 2) != int(last_time * 2):
-                    print(f"Roll: {roll:.2f}° | AngVel: {angular_velocity:.2f}°/s | "
-                          f"Output: {output:.1f} | Motor: {speed:.0f}% {direction}")
-                
-                # Call debug callback if provided
+                # Send data to web interface through callback - always call if provided
                 if debug_callback:
                     debug_callback(debug_info)
+                
+                # Print debug info to console less frequently to avoid overwhelming
+                if self.enable_debug and current_time - last_debug_time > 0.5:  # Print every 0.5 seconds
+                    print(f"\rRoll: {roll:.2f}° | AngVel: {angular_velocity:.2f}°/s | Output: {output:.1f} | Motor: {speed:.0f}% {direction}", end="")
+                    last_debug_time = current_time
                 
                 # Update last time
                 last_time = current_time
                 
-        except KeyboardInterrupt:
-            print("\nBalancing interrupted by user.")
-        
+        except Exception as e:
+            print(f"Error in balancing loop: {e}")
         finally:
-            self.stop_balancing()
+            # Clean up
+            if self.using_dual_motors:
+                self.motor.stop_motors()
+            else:
+                self.motor.stop_motor()
+            
+            # Restore terminal settings
+            if old_settings is not None:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
     
     def stop_balancing(self):
         """Stop the balancing control loop."""
