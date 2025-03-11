@@ -12,7 +12,7 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from pid_controller import PIDController
-import web_server
+from webpage import start_server, stop_server, add_data_point, set_pid_params, update_pid_params, set_update_callback
 
 def runtime_parameter_tuning(pid_tuner, balance_controller):
     """
@@ -37,7 +37,31 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     print("\nWeb Dashboard available at http://192.168.0.103:5000")
     
     # Start the web server
-    web_server.start_server(port=5000)
+    start_server(port=5000)
+    
+    # Set initial PID parameters in the web interface
+    set_pid_params(
+        balance_controller.pid.kp,
+        balance_controller.pid.ki,
+        balance_controller.pid.kd,
+        0.0  # Target angle is always 0 for balancing
+    )
+    
+    # Set up callback for when parameters are updated via the web interface
+    def params_update_callback(params):
+        if 'kp' in params:
+            balance_controller.pid.kp = params['kp']
+            CONFIG['P_GAIN'] = params['kp']
+        if 'ki' in params:
+            balance_controller.pid.ki = params['ki']
+            CONFIG['I_GAIN'] = params['ki']
+        if 'kd' in params:
+            balance_controller.pid.kd = params['kd']
+            CONFIG['D_GAIN'] = params['kd']
+        print(f"\nParameters updated from web: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}")
+    
+    # Register the callback
+    set_update_callback(params_update_callback)
     
     # Create a debug callback function to send data to the web interface
     def debug_callback(debug_info):
@@ -47,10 +71,10 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         output = debug_info['output']
         pid_info = debug_info['pid']
         
-        web_server.add_data_point(
+        add_data_point(
             actual_angle=roll,
             target_angle=0.0,  # Target is always 0 for balancing
-            pid_error=0.0 - roll,  # Error is target - actual
+            error=0.0 - roll,  # Error is target - actual
             p_term=pid_info['p_term'],
             i_term=pid_info['i_term'],
             d_term=pid_info['d_term'],
@@ -120,7 +144,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                     # Restore terminal settings before exiting
                     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
                     # Stop the web server
-                    web_server.stop_server()
+                    stop_server()
                     return
                 
                 elif key.lower() == 'p':
@@ -154,16 +178,22 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                     if current_param == "P_GAIN":
                         balance_controller.pid.kp += 1.0
                         CONFIG['P_GAIN'] = balance_controller.pid.kp
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nIncreased P_GAIN to {balance_controller.pid.kp:.2f}")
                     elif current_param == "I_GAIN":
                         balance_controller.pid.ki += 1.0
                         CONFIG['I_GAIN'] = balance_controller.pid.ki
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nIncreased I_GAIN to {balance_controller.pid.ki:.2f}")
                     elif current_param == "D_GAIN":
                         balance_controller.pid.kd += 1.0
                         CONFIG['D_GAIN'] = balance_controller.pid.kd
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nIncreased D_GAIN to {balance_controller.pid.kd:.2f}")
                     elif current_param == "DIRECTION_CHANGE_BOOST":
@@ -184,16 +214,22 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                     if current_param == "P_GAIN":
                         balance_controller.pid.kp = max(0.0, balance_controller.pid.kp - 1.0)
                         CONFIG['P_GAIN'] = balance_controller.pid.kp
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nDecreased P_GAIN to {balance_controller.pid.kp:.2f}")
                     elif current_param == "I_GAIN":
                         balance_controller.pid.ki = max(0.0, balance_controller.pid.ki - 1.0)
                         CONFIG['I_GAIN'] = balance_controller.pid.ki
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nDecreased I_GAIN to {balance_controller.pid.ki:.2f}")
                     elif current_param == "D_GAIN":
                         balance_controller.pid.kd = max(0.0, balance_controller.pid.kd - 1.0)
                         CONFIG['D_GAIN'] = balance_controller.pid.kd
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nDecreased D_GAIN to {balance_controller.pid.kd:.2f}")
                     elif current_param == "DIRECTION_CHANGE_BOOST":
@@ -214,16 +250,22 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                     if current_param == "P_GAIN":
                         balance_controller.pid.kp += 0.1
                         CONFIG['P_GAIN'] = balance_controller.pid.kp
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine increased P_GAIN to {balance_controller.pid.kp:.2f}")
                     elif current_param == "I_GAIN":
                         balance_controller.pid.ki += 0.1
                         CONFIG['I_GAIN'] = balance_controller.pid.ki
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine increased I_GAIN to {balance_controller.pid.ki:.2f}")
                     elif current_param == "D_GAIN":
                         balance_controller.pid.kd += 0.1
                         CONFIG['D_GAIN'] = balance_controller.pid.kd
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine increased D_GAIN to {balance_controller.pid.kd:.2f}")
                     elif current_param == "DIRECTION_CHANGE_BOOST":
@@ -244,16 +286,22 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
                     if current_param == "P_GAIN":
                         balance_controller.pid.kp = max(0.0, balance_controller.pid.kp - 0.1)
                         CONFIG['P_GAIN'] = balance_controller.pid.kp
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine decreased P_GAIN to {balance_controller.pid.kp:.2f}")
                     elif current_param == "I_GAIN":
                         balance_controller.pid.ki = max(0.0, balance_controller.pid.ki - 0.1)
                         CONFIG['I_GAIN'] = balance_controller.pid.ki
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine decreased I_GAIN to {balance_controller.pid.ki:.2f}")
                     elif current_param == "D_GAIN":
                         balance_controller.pid.kd = max(0.0, balance_controller.pid.kd - 0.1)
                         CONFIG['D_GAIN'] = balance_controller.pid.kd
+                        # Update web interface
+                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
                         sys.stdout.write("\r\033[K")  # Clear line
                         print(f"\nFine decreased D_GAIN to {balance_controller.pid.kd:.2f}")
                     elif current_param == "DIRECTION_CHANGE_BOOST":
@@ -303,7 +351,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         balancing_thread.join(timeout=1.0)
         
         # Stop the web server
-        web_server.stop_server()
+        stop_server()
         
         print("Runtime tuning exited.")
 
@@ -505,10 +553,10 @@ def main():
                     output = debug_info['output']
                     pid_info = debug_info['pid']
                     
-                    web_server.add_data_point(
+                    add_data_point(
                         actual_angle=roll,
                         target_angle=0.0,  # Target is always 0 for balancing
-                        pid_error=0.0 - roll,  # Error is target - actual
+                        error=0.0 - roll,  # Error is target - actual
                         p_term=pid_info['p_term'],
                         i_term=pid_info['i_term'],
                         d_term=pid_info['d_term'],
@@ -518,14 +566,14 @@ def main():
                 # Start the web server
                 print("\nStarting web dashboard...")
                 print("Web interface available at http://192.168.0.103:5000")
-                web_server.start_server(port=5000)
+                start_server(port=5000)
                 
                 try:
                     # Start balancing with the debug callback
                     balance_controller.start_balancing(debug_callback)
                 finally:
                     # Stop the web server when balancing ends
-                    web_server.stop_server()
+                    stop_server()
                     
             elif choice == '2':
                 dual_motor_test(motors)
@@ -552,7 +600,7 @@ def main():
     finally:
         try:
             motors.cleanup()
-            web_server.stop_server()  # Ensure web server is stopped when exiting
+            stop_server()  # Ensure web server is stopped when exiting
         except:
             pass
         print("Goodbye!")
