@@ -64,9 +64,11 @@ class BalanceController:
         # Direction change boost - apply extra power momentarily when changing directions
         # to improve responsiveness of the system
         if self.last_direction is not None and direction != self.last_direction and direction != "stopped":
-            # Boost the speed by 20% when changing directions to overcome inertia
-            # but don't exceed maximum speed
-            speed = min(speed * 1.2, self.config['MAX_MOTOR_SPEED'])
+            # Get boost percentage from config (default to 20% if not present)
+            boost_percent = self.config.get('DIRECTION_CHANGE_BOOST', 20.0)
+            # Apply boost but don't exceed maximum speed
+            boost_multiplier = 1.0 + (boost_percent / 100.0)
+            speed = min(speed * boost_multiplier, self.config['MAX_MOTOR_SPEED'])
         
         # Cap speed at maximum
         speed = min(speed, self.config['MAX_MOTOR_SPEED'])

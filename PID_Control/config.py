@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     'MOTOR_DEADBAND': 60,  # Motor doesn't move below this value (0-100)
     'MAX_MOTOR_SPEED': 100, # Maximum motor speed (0-100)
     'SAFE_TILT_LIMIT': 45,  # Safety cutoff angle in degrees
+    'DIRECTION_CHANGE_BOOST': 20.0,  # Percentage boost when changing direction (0-100)
     
     # Loop timing
     'SAMPLE_TIME': 0.01,  # Time between PID updates (seconds)
@@ -24,14 +25,6 @@ DEFAULT_CONFIG = {
     # IMU parameters
     'IMU_FILTER_ALPHA': 0.3,     # Low-pass filter coefficient (0-1)
     'IMU_UPSIDE_DOWN': True,     # Set to True if IMU is mounted upside down
-    
-    # Hardware pin configuration - Motor A (new motor)
-    'MOTOR_A_IN1_PIN': 12,  # Motor A control pin 1
-    'MOTOR_A_IN2_PIN': 18,  # Motor A control pin 2
-    
-    # Hardware pin configuration - Motor B (existing motor)
-    'MOTOR_B_IN1_PIN': 13,  # Motor B control pin 1
-    'MOTOR_B_IN2_PIN': 19,  # Motor B control pin 2
 }
 
 def load_config():
@@ -75,15 +68,15 @@ CONFIG = load_config()
 
 # Set up hardware configuration for backward compatibility and convenience
 HARDWARE_CONFIG = {
-    # For backward compatibility (older code expects these keys)
-    'IN1_PIN': CONFIG.get('MOTOR_B_IN1_PIN', CONFIG.get('IN1_PIN', 13)),
-    'IN2_PIN': CONFIG.get('MOTOR_B_IN2_PIN', CONFIG.get('IN2_PIN', 19)),
+    # Hard-coded pin values - not tunable
+    'MOTOR_A_IN1_PIN': 12,
+    'MOTOR_A_IN2_PIN': 18,
+    'MOTOR_B_IN1_PIN': 13,
+    'MOTOR_B_IN2_PIN': 19,
     
-    # New specific motor pins
-    'MOTOR_A_IN1_PIN': CONFIG.get('MOTOR_A_IN1_PIN', 12),
-    'MOTOR_A_IN2_PIN': CONFIG.get('MOTOR_A_IN2_PIN', 18),
-    'MOTOR_B_IN1_PIN': CONFIG.get('MOTOR_B_IN1_PIN', CONFIG.get('IN1_PIN', 13)),
-    'MOTOR_B_IN2_PIN': CONFIG.get('MOTOR_B_IN2_PIN', CONFIG.get('IN2_PIN', 19))
+    # For backward compatibility (older code expects these keys)
+    'IN1_PIN': 13,
+    'IN2_PIN': 19
 }
 
 # For backward compatibility

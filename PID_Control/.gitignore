@@ -3,11 +3,12 @@ venv/
 .venv/
 env/
 ENV/
+virtualenv/
 
 # Python cache files
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
 
 # Distribution / packaging
 dist/
@@ -19,9 +20,6 @@ build/
 .vscode/
 *.swp
 *.swo
-
-# Environment variables
-.env
 
 # Operating System
 .DS_Store
