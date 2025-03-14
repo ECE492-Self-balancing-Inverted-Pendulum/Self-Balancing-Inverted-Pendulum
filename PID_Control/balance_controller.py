@@ -45,57 +45,46 @@ class BalanceController:
             output: PID controller output (-100 to 100)
             
         Returns:
-            Motor speed and direction
+            Tuple of (output, speed, direction)
         """
         # Determine direction based on sign of output
-        direction = "clockwise" if output > 0 else "counterclockwise"
+        if output > 0:
+            direction = "clockwise"
+        else:
+            direction = "counterclockwise"
         
-        # Calculate absolute motor speed
+        # Take absolute value for speed
         speed = abs(output)
         
-        # Apply deadband compensation with reduced delay for direction changes
+        # Apply motor deadband
         if speed < self.config['MOTOR_DEADBAND']:
-            if speed < self.config['MOTOR_DEADBAND'] / 3:  # Reduced threshold for better responsiveness
-                # If speed is significantly below deadband, just stop
-                if self.using_dual_motors:
-                    self.motor.stop_motors()
-                else:
-                    self.motor.stop_motor()
-                return 0, "stopped"
-            else:
-                # If speed is close to deadband, set it to minimum effective speed
-                speed = self.config['MOTOR_DEADBAND']
+            speed = 0
+            direction = "stop"
         
-        # Direction change boost - apply extra power momentarily when changing directions
-        # to improve responsiveness of the system
-        if self.last_direction is not None and direction != self.last_direction and direction != "stopped":
-            # Get boost percentage from config (default to 20% if not present)
-            boost_percent = self.config.get('DIRECTION_CHANGE_BOOST', 20.0)
-            # Apply boost but don't exceed maximum speed
-            boost_multiplier = 1.0 + (boost_percent / 100.0)
-            speed = min(speed * boost_multiplier, self.config['MAX_MOTOR_SPEED'])
+        # Apply boost when changing direction to overcome inertia
+        if self.last_direction != direction and direction != "stop":
+            # Add a boost when changing direction to overcome inertia
+            boost_percent = self.config.get('DIRECTION_CHANGE_BOOST', 20)
+            speed = min(100, speed * (1 + boost_percent / 100.0))
         
-        # Cap speed at maximum
-        speed = min(speed, self.config['MAX_MOTOR_SPEED'])
+        # Save current direction for next iteration
+        if direction != "stop":
+            self.last_direction = direction
         
-        # Apply to motor(s)
+        # Set motor speed based on whether we're using dual motors or single
         if self.using_dual_motors:
             self.motor.set_motors_speed(speed, direction)
         else:
             self.motor.set_motor_speed(speed, direction)
         
-        # Store direction for next call
-        if direction != "stopped":
-            self.last_direction = direction
-        
-        return speed, direction
+        return output, speed, direction
     
     def start_balancing(self, debug_callback=None):
         """
-        Start the balancing control loop.
+        Start the self-balancing control loop.
         
         Args:
-            debug_callback: Optional function to call with debug information
+            debug_callback: Optional callback function for debugging and visualization
         """
         print("\n🤖 Self-Balancing Mode Started!")
         print("Press 'Q' to return to main menu")
@@ -124,6 +113,9 @@ class BalanceController:
                 if sys.stdin.isatty() and select.select([sys.stdin], [], [], 0.0)[0]:
                     key = sys.stdin.read(1)
                     if key.lower() == 'q':
+                        # Clear line before printing to avoid text overlap
+                        sys.stdout.write('\r' + ' ' * 80)
+                        sys.stdout.flush()
                         print("\nReturning to main menu...")
                         self.running = False
                         break
@@ -145,54 +137,68 @@ class BalanceController:
                 
                 # Safety check - stop if tilt is too extreme
                 if abs(roll) > self.config['SAFE_TILT_LIMIT']:
-                    print(f"⚠️ Safety cutoff: Tilt {roll:.2f}° exceeds limit of {self.config['SAFE_TILT_LIMIT']}°")
+                    # Clear line before printing to avoid text overlap
+                    sys.stdout.write('\r' + ' ' * 80)
+                    sys.stdout.flush()
+                    print(f"\n⚠️ Safety cutoff: Tilt {roll:.2f}° exceeds limit of {self.config['SAFE_TILT_LIMIT']}°")
                     if self.using_dual_motors:
                         self.motor.stop_motors()
                     else:
                         self.motor.stop_motor()
+                    self.running = False
                     break
                 
-                # Compute PID output
-                output = self.pid.compute(roll, angular_velocity, dt)
+                # Update PID controller
+                pid_update = self.pid.update(0.0 - roll, dt, angular_velocity)  # Pass angular velocity for better D term
                 
-                # Apply motor control
-                speed, direction = self.apply_motor_control(output)
+                # Apply motor control based on PID output
+                output, speed, direction = self.apply_motor_control(pid_update)
                 
-                # Create debug info
-                debug_info = {
-                    'time': current_time,
-                    'roll': roll,
-                    'angular_velocity': angular_velocity,
-                    'output': output,
-                    'speed': speed,
-                    'direction': direction,
-                    'pid': self.pid.get_debug_info(),
-                }
-                
-                # Send data to web interface through callback - always call if provided
-                if debug_callback:
-                    debug_callback(debug_info)
-                
-                # Print debug info to console less frequently to avoid overwhelming
-                if self.enable_debug and current_time - last_debug_time > 0.5:  # Print every 0.5 seconds
-                    print(f"\rRoll: {roll:.2f}° | AngVel: {angular_velocity:.2f}°/s | Output: {output:.1f} | Motor: {speed:.0f}% {direction}", end="")
-                    last_debug_time = current_time
-                
-                # Update last time
+                # Update last time for next iteration
                 last_time = current_time
                 
+                # Call debug callback if provided
+                if debug_callback and callable(debug_callback):
+                    # Prepare debug info
+                    debug_info = {
+                        'roll': roll,
+                        'angular_velocity': angular_velocity,
+                        'output': output,
+                        'pid': {
+                            'p_term': self.pid.p_term,
+                            'i_term': self.pid.i_term,
+                            'd_term': self.pid.d_term
+                        }
+                    }
+                    
+                    # Call the debug callback with the info
+                    debug_callback(debug_info)
+                    
+                # Print debug output directly to terminal if no callback and debug is enabled
+                elif self.enable_debug:
+                    # Limit debug output rate to avoid flooding terminal
+                    if current_time - last_debug_time > 0.1:  # Max 10 updates per second
+                        # Clear the line completely before writing
+                        sys.stdout.write('\r' + ' ' * 80)
+                        sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | P: {self.pid.p_term:6.1f} | I: {self.pid.i_term:6.1f} | D: {self.pid.d_term:6.1f}")
+                        sys.stdout.flush()
+                        last_debug_time = current_time
+        
         except Exception as e:
-            print(f"Error in balancing loop: {e}")
+            print(f"\nError in balancing loop: {e}")
+        
         finally:
-            # Clean up
+            # Restore terminal settings
+            if old_settings:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            
+            # Stop motors for safety
             if self.using_dual_motors:
                 self.motor.stop_motors()
             else:
                 self.motor.stop_motor()
             
-            # Restore terminal settings
-            if old_settings is not None:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            print("\nBalancing stopped.")
     
     def stop_balancing(self):
         """Stop the balancing control loop."""

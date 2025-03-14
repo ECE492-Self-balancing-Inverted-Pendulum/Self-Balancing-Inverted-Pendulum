@@ -28,17 +28,17 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     print("Controls:")
     print("  Q: Return to Main Menu")
     
-    # Get the device's IP address for better user experience
-    hostname = socket.gethostname()
+    # Note: We don't need to print the IP here since the web_server module will handle that
+    
+    # Try a different port if needed - this may help avoid conflicts with other services
+    server_port = 8080
+    
+    # Start the web server - the web_server module will print the URL
     try:
-        ip_address = socket.gethostbyname(hostname)
-    except:
-        ip_address = "localhost"
-    
-    print(f"\nWeb Dashboard available at http://{ip_address}:5000")
-    
-    # Start the web server
-    start_server(port=5000)
+        start_server(port=server_port)
+    except Exception as e:
+        print(f"❌ Error starting server. Try a different port (current: {server_port}).")
+        return
     
     # Initialize the web interface with current PID parameters
     set_pid_params(
@@ -59,7 +59,9 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if 'kd' in params:
             balance_controller.pid.kd = params['kd']
             CONFIG['D_GAIN'] = params['kd']
-        print(f"\rParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}", end="")
+        
+        # Print on a separate line with newline to avoid text overlapping
+        print(f"\nParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}")
     
     # Register the callback
     set_update_callback(params_update_callback)
@@ -73,8 +75,11 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         output = debug_info['output']
         pid_info = debug_info['pid']
         
-        # Display angle in terminal (similar to option 1)
+        # Display angle in terminal (similar to option 1) 
+        # Use carriage return to overwrite the line and prevent text overlap
         if balance_controller.enable_debug:
+            # Clear the line completely before writing
+            sys.stdout.write("\r" + " " * 80)  # Write 80 spaces to clear the line
             sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
             sys.stdout.flush()
         
@@ -89,12 +94,17 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             pid_output=output
         )
     
+    print("\nStarting balancing. Web dashboard is available for tuning parameters.")
+    print("Press 'Q' to return to the menu.")
+    
     # Start balancing with the dashboard display
     balance_controller.start_balancing(debug_callback)
     
     # The balance_controller will return when 'Q' is pressed
     # At this point, we just need to ensure the server is stopped properly
+    print("\nStopping web server...")
     stop_server()
+    print("Returned to main menu.")
 
 def imu_tuning_mode(imu):
     """

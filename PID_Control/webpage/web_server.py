@@ -9,13 +9,41 @@ import signal
 import atexit
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, send_from_directory
+import sys
+from logging import FileHandler
+import socket
 
-# Configure logging
+# Set Flask's built-in logger to only show errors
+import logging
+from logging import FileHandler
+
+# Configure custom logging to file instead of console
+log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'web_server.log')
+
+# Configure our logger to use a file handler for detailed logs
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,  # Only show errors in console
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('pid_web_server')
+
+# Add a file handler for detailed logs
+file_handler = FileHandler(log_file)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+logger.setLevel(logging.INFO)
+
+# Silence Flask and Werkzeug loggers
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+logging.getLogger('flask').setLevel(logging.ERROR)
+
+# Don't output any Flask server startup messages
+cli = sys.modules.get('flask.cli')
+if cli is not None:
+    cli.show_server_banner = lambda *args, **kwargs: None
 
 # Global variables
 PID_DATA = []
@@ -390,6 +418,26 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
         atexit.register(shutdown_server)
         signal.signal(signal.SIGINT, lambda sig, frame: shutdown_server())
         
+        # Get the actual IP address that others can use to connect
+        actual_ip = "localhost"
+        try:
+            # This is a more reliable way to get the actual IP address
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 1))  # Connect to Google's DNS
+            actual_ip = s.getsockname()[0]
+            s.close()
+        except:
+            # Fallback to hostname-based detection
+            import socket
+            hostname = socket.gethostname()
+            try:
+                actual_ip = socket.gethostbyname(hostname)
+                if actual_ip.startswith('127.'):
+                    # Try to find a non-loopback address
+                    actual_ip = socket.gethostbyname(f"{hostname}.local")
+            except:
+                pass
+        
         # Start the server in a separate thread
         SERVER_STARTED = True
         if not debug:
@@ -398,6 +446,12 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
                 daemon=True
             )
             SERVER_INSTANCE.start()
+            
+            # Print a clean, simple message for the user
+            print("\n✅ Web server started successfully!")
+            print(f"📊 Access the dashboard at: http://{actual_ip}:{port}")
+            print("─────────────────────────────────────────────────────")
+            
             logger.info(f"Server started on http://{host}:{port}/")
         else:
             # For debug mode, run in main thread
@@ -406,6 +460,8 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
     except Exception as e:
         SERVER_STARTED = False
         logger.error(f"Error starting server: {e}")
+        print(f"\n❌ Could not start web server: {e}")
+        print("Try using a different port (e.g., start_server(port=8080))")
         raise
 
 # Stop the web server
@@ -417,15 +473,33 @@ def stop_server():
         return
     
     try:
-        # Call shutdown handler
-        shutdown_server()
+        # Call shutdown handler without logging (quieter operation)
+        try:
+            if SERVER_STARTED:
+                # Stop CSV logging
+                stop_csv_logging()
+                
+                # Final save of parameters
+                if os.path.exists(CONFIG['pid_config_file']):
+                    with LOCK:
+                        with open(CONFIG['pid_config_file'], 'w') as f:
+                            json.dump(PID_PARAMS, f, indent=4)
+                
+                # Clear any in-memory data that's no longer needed
+                with LOCK:
+                    PID_DATA.clear()
+                    
+                SERVER_STARTED = False
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
         
         # If server was started in a thread, wait for it to finish
         # This is best-effort since Flask doesn't have a clean shutdown mechanism
         # when running in a thread
         if SERVER_INSTANCE and SERVER_INSTANCE.is_alive():
             logger.info("Waiting for server thread to finish...")
-            SERVER_INSTANCE.join(timeout=2.0)  # Wait up to 2 seconds
+            # Wait for a shorter time to avoid blocking
+            SERVER_INSTANCE.join(timeout=0.5)
             
         SERVER_INSTANCE = None
         logger.info("Server stopped")
