@@ -9,5 +9,6 @@
     "SAFE_TILT_LIMIT": 71,
     "SAMPLE_TIME": 0.01,
     "IN1_PIN": 13,
-    "IN2_PIN": 19
+    "IN2_PIN": 19,
+    "IMU_FILTER_ALPHA": 0.2
 }

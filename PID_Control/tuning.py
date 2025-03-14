@@ -109,7 +109,8 @@ class PIDTuner:
         """
         print("\nCurrent Parameters:")
         for key, value in self.config.items():
-            print(f"{key}: {value}")
+            if key not in ['SETPOINT', 'IN1_PIN', 'IN2_PIN']:
+                print(f"{key}: {value}")
         
         # Group parameters by type for better readability
         print("\nGrouped by category:")
