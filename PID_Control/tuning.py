@@ -119,7 +119,6 @@ class PIDTuner:
         print(f"I_GAIN: {self.config.get('I_GAIN', 'N/A')}")
         print(f"D_GAIN: {self.config.get('D_GAIN', 'N/A')}")
         print(f"MAX_I_TERM: {self.config.get('MAX_I_TERM', 'N/A')}")
-        print(f"SETPOINT: {self.config.get('SETPOINT', 'N/A')}")
         
         print("\nMotor Configuration:")
         print(f"MOTOR_DEADBAND: {self.config.get('MOTOR_DEADBAND', 'N/A')}")
@@ -135,7 +134,7 @@ class PIDTuner:
         
         print("\nTiming:")
         print(f"SAMPLE_TIME: {self.config.get('SAMPLE_TIME', 'N/A')}")
-        
+    
     def tune_parameter_runtime(self, parameter, value):
         """
         Tune a single parameter during runtime.

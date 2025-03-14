@@ -98,7 +98,8 @@ function setupPIDSliders() {
         { slider: 'kp-slider', input: 'kp-input' },
         { slider: 'ki-slider', input: 'ki-input' },
         { slider: 'kd-slider', input: 'kd-input' },
-        { slider: 'target-angle-slider', input: 'target-angle-input' }
+        { slider: 'alpha-slider', input: 'alpha-input' },
+        { slider: 'sample-time-slider', input: 'sample-time-input' }
     ];
     
     sliderInputPairs.forEach(pair => {
@@ -108,7 +109,7 @@ function setupPIDSliders() {
         if (slider && input) {
             // Update input when slider changes
             slider.addEventListener('input', function() {
-                input.value = parseFloat(this.value).toFixed(2);
+                input.value = parseFloat(this.value).toFixed(pair.input === 'alpha-input' ? 2 : 1);
             });
             
             // Update slider when input changes

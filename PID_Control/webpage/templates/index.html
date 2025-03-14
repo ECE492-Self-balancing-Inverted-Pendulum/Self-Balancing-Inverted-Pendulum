@@ -163,17 +163,30 @@
                                 <input type="range" class="form-range" id="kd-slider" min="0" max="10" step="0.1" value="0.1">
                             </div>
                             <div class="mb-3">
-                                <label for="target-angle-input" class="form-label">Target Angle</label>
+                                <label for="alpha-input" class="form-label">IMU Filter Alpha</label>
                                 <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="target-angle-input" step="0.1" min="-10" max="10">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="target-angle-input">-0.1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="target-angle-input">+0.1</button>
+                                    <input type="number" class="form-control" id="alpha-input" step="0.01" min="0.05" max="0.95">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="alpha-input">-0.01</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="alpha-input">+0.01</button>
                                 </div>
                                 <div class="slider-label">
-                                    <span>-10°</span>
-                                    <span>+10°</span>
+                                    <span>0.05 (Smoother)</span>
+                                    <span>0.95 (Responsive)</span>
                                 </div>
-                                <input type="range" class="form-range" id="target-angle-slider" min="-10" max="10" step="0.1" value="0">
+                                <input type="range" class="form-range" id="alpha-slider" min="0.05" max="0.95" step="0.01" value="0.2">
+                            </div>
+                            <div class="mb-3">
+                                <label for="sample-time-input" class="form-label">Sample Time (ms)</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="sample-time-input" step="1" min="5" max="20">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="sample-time-input">-1</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="sample-time-input">+1</button>
+                                </div>
+                                <div class="slider-label">
+                                    <span>5ms (Fast)</span>
+                                    <span>20ms (Slow)</span>
+                                </div>
+                                <input type="range" class="form-range" id="sample-time-slider" min="5" max="20" step="1" value="10">
                             </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Update Parameters</button>
@@ -274,7 +287,8 @@
                     document.getElementById('kp-input').value = data.kp;
                     document.getElementById('ki-input').value = data.ki;
                     document.getElementById('kd-input').value = data.kd;
-                    document.getElementById('target-angle-input').value = data.target_angle;
+                    document.getElementById('alpha-input').value = data.alpha;
+                    document.getElementById('sample-time-input').value = data.sample_time;
                 })
                 .catch(error => {
                     console.error('Error fetching PID parameters:', error);
@@ -293,7 +307,8 @@
                 kp: parseFloat(document.getElementById('kp-input').value),
                 ki: parseFloat(document.getElementById('ki-input').value),
                 kd: parseFloat(document.getElementById('kd-input').value),
-                target_angle: parseFloat(document.getElementById('target-angle-input').value)
+                alpha: parseFloat(document.getElementById('alpha-input').value),
+                sample_time: parseFloat(document.getElementById('sample-time-input').value)
             };
             
             fetch('/api/pid_params', {

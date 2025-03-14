@@ -159,17 +159,32 @@ def imu_tuning_mode(imu):
                     imu.set_alpha(new_alpha)
                     sys.stdout.write("\r\033[K")  # Clear line
                     print(f"\nIncreased alpha to {imu.ALPHA:.2f}")
+                    
+                    # Update the config
+                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    from config import save_config
+                    save_config(CONFIG)
                 
                 elif key == '-':
                     new_alpha = max(imu.ALPHA - 0.05, 0.05)
                     imu.set_alpha(new_alpha)
                     sys.stdout.write("\r\033[K")  # Clear line
                     print(f"\nDecreased alpha to {imu.ALPHA:.2f}")
+                    
+                    # Update the config
+                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    from config import save_config
+                    save_config(CONFIG)
                 
                 elif key == 'r':
                     imu.set_alpha(imu.DEFAULT_ALPHA)
                     sys.stdout.write("\r\033[K")  # Clear line
                     print(f"\nReset alpha to default ({imu.DEFAULT_ALPHA:.2f})")
+                    
+                    # Update the config
+                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    from config import save_config
+                    save_config(CONFIG)
                 
                 elif key == 't':
                     # Toggle the upside-down setting
@@ -339,7 +354,7 @@ def main():
                 balance_controller = BalanceController(imu, motors, CONFIG)
             elif choice == '4':
                 # Quick tuning of just the P, I, and D gains
-                pid_tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN'])
+                pid_tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN', 'IMU_FILTER_ALPHA'])
                 # Update the balance controller with the new configuration
                 balance_controller = BalanceController(imu, motors, CONFIG)
             elif choice == '5':

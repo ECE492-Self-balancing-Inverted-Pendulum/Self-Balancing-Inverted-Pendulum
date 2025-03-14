@@ -58,7 +58,8 @@ PID_PARAMS = {
     'kp': 1.0,
     'ki': 0.1,
     'kd': 0.01,
-    'target_angle': 0.0
+    'alpha': 0.2,
+    'sample_time': 10  # in milliseconds
 }
 CSV_FILE = None
 CSV_WRITER = None
@@ -73,11 +74,34 @@ app = Flask(__name__, static_folder='static')
 def load_pid_params():
     global PID_PARAMS
     try:
+        # First try to load from pid_config.json
         if os.path.exists(CONFIG['pid_config_file']):
             with open(CONFIG['pid_config_file'], 'r') as f:
                 loaded_params = json.load(f)
                 logger.info(f"Loaded PID parameters: {loaded_params}")
                 PID_PARAMS.update(loaded_params)
+        
+        # Then try to load from robot_config.json (this will override pid_config.json)
+        robot_config_path = 'robot_config.json'
+        if os.path.exists(robot_config_path):
+            with open(robot_config_path, 'r') as f:
+                robot_config = json.load(f)
+                # Map robot_config to PID_PARAMS
+                mapping = {
+                    'P_GAIN': 'kp',
+                    'I_GAIN': 'ki',
+                    'D_GAIN': 'kd',
+                    'IMU_FILTER_ALPHA': 'alpha'
+                }
+                for robot_key, pid_key in mapping.items():
+                    if robot_key in robot_config:
+                        PID_PARAMS[pid_key] = robot_config[robot_key]
+                
+                # Handle sample_time separately (convert from seconds to milliseconds)
+                if 'SAMPLE_TIME' in robot_config:
+                    PID_PARAMS['sample_time'] = int(robot_config['SAMPLE_TIME'] * 1000)
+                
+                logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
     except Exception as e:
         logger.error(f"Error loading PID parameters: {e}")
 
@@ -203,13 +227,17 @@ def update_pid_params():
         # Update the parameters with thread safety
         with LOCK:
             # Validate parameters before updating
-            for key in ['kp', 'ki', 'kd', 'target_angle']:
+            for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time']:
                 if key in data:
                     try:
                         # Convert to float and validate ranges
                         value = float(data[key])
                         if key in ['kp', 'ki', 'kd'] and value < 0:
                             return jsonify({"error": f"Parameter {key} cannot be negative"}), 400
+                        elif key == 'alpha' and (value < 0.05 or value > 0.95):
+                            return jsonify({"error": "Alpha must be between 0.05 and 0.95"}), 400
+                        elif key == 'sample_time' and (value < 5 or value > 20):
+                            return jsonify({"error": "Sample time must be between 5 and 20 milliseconds"}), 400
                         PID_PARAMS[key] = value
                     except ValueError:
                         return jsonify({"error": f"Invalid value for {key}"}), 400
@@ -234,6 +262,11 @@ def update_pid_params():
                     robot_config['I_GAIN'] = data['ki']
                 if 'kd' in data:
                     robot_config['D_GAIN'] = data['kd']
+                if 'alpha' in data:
+                    robot_config['IMU_FILTER_ALPHA'] = data['alpha']
+                if 'sample_time' in data:
+                    # Convert milliseconds to seconds for robot_config
+                    robot_config['SAMPLE_TIME'] = data['sample_time'] / 1000.0
                 
                 # Save updated robot config
                 with open(robot_config_path, 'w') as f:
