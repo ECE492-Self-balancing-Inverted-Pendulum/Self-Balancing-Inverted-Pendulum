@@ -73,6 +73,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         roll = debug_info['roll']
         angular_velocity = debug_info['angular_velocity']
         output = debug_info['output']
+        motor_output = debug_info.get('motor_output', abs(output))  # Get motor output percentage
         pid_info = debug_info['pid']
         
         # Display angle in terminal (similar to option 1) 
@@ -80,7 +81,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if balance_controller.enable_debug:
             # Clear the line completely before writing
             sys.stdout.write("\r" + " " * 80)  # Write 80 spaces to clear the line
-            sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
+            sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | Motor: {motor_output:3.0f}% | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
             sys.stdout.flush()
         
         # Send data to web dashboard
@@ -91,7 +92,8 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             p_term=pid_info['p_term'],
             i_term=pid_info['i_term'],
             d_term=pid_info['d_term'],
-            pid_output=output
+            pid_output=output,
+            motor_output=motor_output  # Add motor output percentage
         )
     
     print("\nStarting balancing. Web dashboard is available for tuning parameters.")
@@ -302,6 +304,7 @@ def main():
                     roll = debug_info['roll']
                     angular_velocity = debug_info['angular_velocity']
                     output = debug_info['output']
+                    motor_output = debug_info.get('motor_output', abs(output))  # Get motor output percentage
                     pid_info = debug_info['pid']
                     
                     add_data_point(
@@ -311,7 +314,8 @@ def main():
                         p_term=pid_info['p_term'],
                         i_term=pid_info['i_term'],
                         d_term=pid_info['d_term'],
-                        pid_output=output
+                        pid_output=output,
+                        motor_output=motor_output  # Add motor output percentage
                     )
                 
                 # Start the web server

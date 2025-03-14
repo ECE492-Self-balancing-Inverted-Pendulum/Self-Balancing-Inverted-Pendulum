@@ -164,6 +164,7 @@ class BalanceController:
                         'roll': roll,
                         'angular_velocity': angular_velocity,
                         'output': output,
+                        'motor_output': speed,  # Add motor output percentage
                         'pid': {
                             'p_term': self.pid.p_term,
                             'i_term': self.pid.i_term,

@@ -216,8 +216,33 @@ def update_pid_params():
         
         logger.info(f"Updated PID parameters: {PID_PARAMS}")
         
-        # Save to file
+        # Save to PID config file
         save_pid_params()
+        
+        # Also update the robot_config.json file
+        try:
+            robot_config_path = 'robot_config.json'
+            if os.path.exists(robot_config_path):
+                # Load current robot config
+                with open(robot_config_path, 'r') as f:
+                    robot_config = json.load(f)
+                
+                # Update PID parameters in robot config
+                if 'kp' in data:
+                    robot_config['P_GAIN'] = data['kp']
+                if 'ki' in data:
+                    robot_config['I_GAIN'] = data['ki']
+                if 'kd' in data:
+                    robot_config['D_GAIN'] = data['kd']
+                
+                # Save updated robot config
+                with open(robot_config_path, 'w') as f:
+                    json.dump(robot_config, f, indent=4)
+                    
+                logger.info(f"Updated robot_config.json with PID parameters")
+        except Exception as e:
+            logger.error(f"Error updating robot_config.json: {e}")
+            # Continue anyway, as pid_config.json was successfully updated
         
         # Return the updated parameters
         return jsonify(PID_PARAMS)
@@ -276,7 +301,7 @@ def serve_static(path):
         return jsonify({"error": f"File not found: {path}"}), 404
 
 # Add a new data point
-def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_term, d_term, pid_output):
+def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_term, d_term, pid_output, motor_output=None):
     """
     Add a new data point to the PID data store with thread safety and data validation.
     
@@ -289,6 +314,7 @@ def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_t
         i_term: Integral term calculated by PID controller
         d_term: Derivative term calculated by PID controller
         pid_output: Overall PID controller output
+        motor_output: Optional motor output percentage (defaults to abs(pid_output) if not provided)
     """
     with LOCK:
         try:
@@ -302,6 +328,12 @@ def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_t
                 i_term = float(i_term) 
                 d_term = float(d_term)
                 pid_output = float(pid_output)
+                
+                # If motor_output is not provided, calculate it from pid_output
+                if motor_output is None:
+                    motor_output = min(100, abs(float(pid_output)))
+                else:
+                    motor_output = float(motor_output)
             except (ValueError, TypeError) as e:
                 logger.warning(f"Data point validation error: {e}")
                 return
@@ -315,7 +347,8 @@ def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_t
                 "p_term": p_term,
                 "i_term": i_term,
                 "d_term": d_term,
-                "pid_output": pid_output
+                "pid_output": pid_output,
+                "motor_output": motor_output
             }
             
             # Add to the data array
@@ -333,7 +366,7 @@ def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_t
                 try:
                     CSV_WRITER.writerow([
                         timestamp, actual_angle, target_angle, pid_error, 
-                        p_term, i_term, d_term, pid_output
+                        p_term, i_term, d_term, pid_output, motor_output
                     ])
                     CSV_FILE.flush()
                 except Exception as e:
@@ -359,7 +392,7 @@ def start_csv_logging():
             # Write header
             CSV_WRITER.writerow([
                 'timestamp', 'actual_angle', 'target_angle', 'pid_error',
-                'p_term', 'i_term', 'd_term', 'pid_output'
+                'p_term', 'i_term', 'd_term', 'pid_output', 'motor_output'
             ])
             
             logger.info(f"Started CSV logging to {csv_path}")

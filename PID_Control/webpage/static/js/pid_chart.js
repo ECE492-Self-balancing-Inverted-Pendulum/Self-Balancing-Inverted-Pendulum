@@ -82,11 +82,42 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Set up PID parameter sliders
+    setupPIDSliders();
+    
     // Start data fetching
     window.dataIntervalActive = true;
     window.dataInterval = setInterval(fetchData, config.updateInterval);
     fetchData(); // Initial fetch
 });
+
+// Set up PID parameter sliders to sync with input fields
+function setupPIDSliders() {
+    // Connect each slider to its corresponding input field
+    const sliderInputPairs = [
+        { slider: 'kp-slider', input: 'kp-input' },
+        { slider: 'ki-slider', input: 'ki-input' },
+        { slider: 'kd-slider', input: 'kd-input' },
+        { slider: 'target-angle-slider', input: 'target-angle-input' }
+    ];
+    
+    sliderInputPairs.forEach(pair => {
+        const slider = document.getElementById(pair.slider);
+        const input = document.getElementById(pair.input);
+        
+        if (slider && input) {
+            // Update input when slider changes
+            slider.addEventListener('input', function() {
+                input.value = parseFloat(this.value).toFixed(2);
+            });
+            
+            // Update slider when input changes
+            input.addEventListener('change', function() {
+                slider.value = parseFloat(this.value);
+            });
+        }
+    });
+}
 
 // Initialize charts
 function initializeCharts() {
@@ -127,14 +158,6 @@ function initializeCharts() {
                     borderWidth: 1,
                     pointRadius: 0,
                     hidden: true,
-                    data: []
-                },
-                {
-                    label: 'PID Output',
-                    borderColor: 'rgb(255, 159, 64)',
-                    backgroundColor: 'rgba(255, 159, 64, 0.1)',
-                    borderWidth: 1,
-                    pointRadius: 0,
                     data: []
                 }
             ]
@@ -215,6 +238,22 @@ function initializeCharts() {
                     label: 'D Term',
                     borderColor: 'rgb(255, 206, 86)',
                     backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    data: []
+                },
+                {
+                    label: 'PID Output',
+                    borderColor: 'rgb(255, 159, 64)',
+                    backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    data: []
+                },
+                {
+                    label: 'Motor Output (%)',
+                    borderColor: 'rgb(75, 192, 125)',
+                    backgroundColor: 'rgba(75, 192, 125, 0.1)',
                     borderWidth: 2,
                     pointRadius: 0,
                     data: []
@@ -350,14 +389,18 @@ function updateCharts(data) {
     const iTerms = data.map(item => parseFloat(item.i_term));
     const dTerms = data.map(item => parseFloat(item.d_term));
     
+    // Calculate motor output percentage (absolute value of PID output, capped at 100)
+    const motorOutputs = pidOutputs.map(output => Math.min(100, Math.abs(output)));
+    
     // Create dataset points
     const angleDataActual = combineTimeAndValues(relativeTimestamps, actualAngles);
     const angleDataTarget = combineTimeAndValues(relativeTimestamps, targetAngles);
     const angleDataError = combineTimeAndValues(relativeTimestamps, pidErrors);
-    const angleDataOutput = combineTimeAndValues(relativeTimestamps, pidOutputs);
+    const pidDataOutput = combineTimeAndValues(relativeTimestamps, pidOutputs);
     const pidDataP = combineTimeAndValues(relativeTimestamps, pTerms);
     const pidDataI = combineTimeAndValues(relativeTimestamps, iTerms);
     const pidDataD = combineTimeAndValues(relativeTimestamps, dTerms);
+    const motorDataOutput = combineTimeAndValues(relativeTimestamps, motorOutputs);
     
     // Calculate the visible time window
     const maxTime = Math.max(...relativeTimestamps);
@@ -368,11 +411,12 @@ function updateCharts(data) {
     angleChart.data.datasets[0].data = angleDataActual;
     angleChart.data.datasets[1].data = angleDataTarget;
     angleChart.data.datasets[2].data = angleDataError;
-    angleChart.data.datasets[3].data = angleDataOutput;
     
     pidTermsChart.data.datasets[0].data = pidDataP;
     pidTermsChart.data.datasets[1].data = pidDataI;
     pidTermsChart.data.datasets[2].data = pidDataD;
+    pidTermsChart.data.datasets[3].data = pidDataOutput;
+    pidTermsChart.data.datasets[4].data = motorDataOutput;
     
     // Update x-axis range to ensure data scrolls from right
     angleChart.options.scales.x.min = visibleMin;

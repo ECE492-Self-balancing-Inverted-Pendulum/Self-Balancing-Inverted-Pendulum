@@ -125,35 +125,55 @@
                         <form id="pid-form">
                             <div class="mb-3">
                                 <label for="kp-input" class="form-label">Proportional (KP)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="kp-input" step="0.1">
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="kp-input" step="0.1" min="0" max="50">
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="kp-input">-0.1</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="kp-input">+0.1</button>
                                 </div>
+                                <div class="slider-label">
+                                    <span>0</span>
+                                    <span>50</span>
+                                </div>
+                                <input type="range" class="form-range" id="kp-slider" min="0" max="50" step="0.1" value="1.0">
                             </div>
                             <div class="mb-3">
                                 <label for="ki-input" class="form-label">Integral (KI)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="ki-input" step="0.1">
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="ki-input" step="0.01" min="0" max="5">
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="ki-input">-0.1</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="ki-input">+0.1</button>
                                 </div>
+                                <div class="slider-label">
+                                    <span>0</span>
+                                    <span>5</span>
+                                </div>
+                                <input type="range" class="form-range" id="ki-slider" min="0" max="5" step="0.01" value="0.1">
                             </div>
                             <div class="mb-3">
                                 <label for="kd-input" class="form-label">Derivative (KD)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="kd-input" step="0.1">
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="kd-input" step="0.1" min="0" max="10">
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="kd-input">-0.1</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="kd-input">+0.1</button>
                                 </div>
+                                <div class="slider-label">
+                                    <span>0</span>
+                                    <span>10</span>
+                                </div>
+                                <input type="range" class="form-range" id="kd-slider" min="0" max="10" step="0.1" value="0.1">
                             </div>
                             <div class="mb-3">
                                 <label for="target-angle-input" class="form-label">Target Angle</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="target-angle-input" step="0.1">
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="target-angle-input" step="0.1" min="-10" max="10">
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="target-angle-input">-0.1</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="target-angle-input">+0.1</button>
                                 </div>
+                                <div class="slider-label">
+                                    <span>-10°</span>
+                                    <span>+10°</span>
+                                </div>
+                                <input type="range" class="form-range" id="target-angle-slider" min="-10" max="10" step="0.1" value="0">
                             </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Update Parameters</button>
