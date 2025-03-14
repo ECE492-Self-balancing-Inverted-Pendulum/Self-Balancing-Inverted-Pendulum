@@ -6,40 +6,41 @@ import select
 import sys
 import tty
 import termios
+import socket
 
 # Import our new modules
 from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from pid_controller import PIDController
-from webpage import start_server, stop_server, add_data_point, PID_PARAMS
+from webpage import start_server, stop_server, add_data_point, set_pid_params, update_pid_params, set_update_callback
 
 def runtime_parameter_tuning(pid_tuner, balance_controller):
     """
-    Allows tuning parameters during runtime without interrupting the balancing.
-    Uses a simplified keyboard interface for adjusting P, I, D values.
+    Self-balancing mode with web dashboard for parameter tuning.
+    Shows real-time angle output in the terminal while allowing parameter tuning via web interface.
     
     Args:
         pid_tuner: PID tuner instance
         balance_controller: Balance controller instance
     """
-    print("\n⚙️ Runtime Parameter Tuning")
-    print("You can modify parameters while the robot is balancing.")
+    print("\n🤖 Self-Balancing Mode with Web Dashboard")
     print("Controls:")
-    print("  P, I, D: Select parameter to tune (P is default)")
-    print("  + / -: Increase/decrease selected parameter by 1.0")
-    print("  w / s: Fine adjustment (increase/decrease by 0.1)")
-    print("  B: Toggle parameter selection to direction change boost")
-    print("  A: Toggle parameter selection to IMU filter alpha")
-    print("  L: List all current parameters")
-    print("  V: Save current configuration")
     print("  Q: Return to Main Menu")
-    print("\nWeb Dashboard available at http://192.168.0.103:5000")
+    
+    # Get the device's IP address for better user experience
+    hostname = socket.gethostname()
+    try:
+        ip_address = socket.gethostbyname(hostname)
+    except:
+        ip_address = "localhost"
+    
+    print(f"\nWeb Dashboard available at http://{ip_address}:5000")
     
     # Start the web server
     start_server(port=5000)
     
-    # Set initial PID parameters in the web interface
+    # Initialize the web interface with current PID parameters
     set_pid_params(
         balance_controller.pid.kp,
         balance_controller.pid.ki,
@@ -58,12 +59,13 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if 'kd' in params:
             balance_controller.pid.kd = params['kd']
             CONFIG['D_GAIN'] = params['kd']
-        print(f"\nParameters updated from web: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}")
+        print(f"\rParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}", end="")
     
     # Register the callback
     set_update_callback(params_update_callback)
     
     # Create a debug callback function to send data to the web interface
+    # and display angles in the terminal
     def debug_callback(debug_info):
         # Send data to the web interface
         roll = debug_info['roll']
@@ -71,6 +73,12 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         output = debug_info['output']
         pid_info = debug_info['pid']
         
+        # Display angle in terminal (similar to option 1)
+        if balance_controller.enable_debug:
+            sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
+            sys.stdout.flush()
+        
+        # Send data to web dashboard
         add_data_point(
             actual_angle=roll,
             target_angle=0.0,  # Target is always 0 for balancing
@@ -81,279 +89,12 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             pid_output=output
         )
     
-    # Start balancing in a separate thread
-    balancing_thread = threading.Thread(
-        target=balance_controller.start_balancing,
-        args=(debug_callback,),
-        daemon=True
-    )
-    balancing_thread.start()
+    # Start balancing with the dashboard display
+    balance_controller.start_balancing(debug_callback)
     
-    # Setup for non-blocking input
-    old_settings = termios.tcgetattr(sys.stdin)
-    try:
-        # Set terminal to raw mode
-        tty.setraw(sys.stdin.fileno())
-        
-        # Default parameter to tune
-        current_param = "P_GAIN"
-        running = True
-        
-        while running:
-            # Display current parameter and value
-            sys.stdout.write("\r\033[K")  # Clear line
-            
-            # Get current parameter value
-            if current_param == "P_GAIN":
-                current_value = balance_controller.pid.kp
-                display_param = "P"
-            elif current_param == "I_GAIN":
-                current_value = balance_controller.pid.ki
-                display_param = "I"
-            elif current_param == "D_GAIN":
-                current_value = balance_controller.pid.kd
-                display_param = "D"
-            elif current_param == "DIRECTION_CHANGE_BOOST":
-                current_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0)
-                display_param = "Boost"
-            elif current_param == "IMU_FILTER_ALPHA":
-                current_value = balance_controller.imu.ALPHA
-                display_param = "Alpha"
-            else:
-                current_value = CONFIG.get(current_param, 0)
-                display_param = current_param
-                
-            sys.stdout.write(f"Tuning {display_param}: {current_value:.2f} | Press L for list, Q to quit")
-            sys.stdout.flush()
-            
-            # Check if key pressed
-            if select.select([sys.stdin], [], [], 0.1)[0]:
-                key = sys.stdin.read(1)
-                
-                if key.lower() == 'q':
-                    running = False
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print("\nReturning to main menu.")
-                    # Stop the balancing thread
-                    balance_controller.running = False
-                    # Clean up before returning
-                    if balance_controller.using_dual_motors:
-                        balance_controller.motor.stop_motors()
-                    else:
-                        balance_controller.motor.stop_motor()
-                    # Restore terminal settings before exiting
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                    # Stop the web server
-                    stop_server()
-                    return
-                
-                elif key.lower() == 'p':
-                    current_param = "P_GAIN"
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print(f"\nSelected P_GAIN: {balance_controller.pid.kp:.2f}")
-                
-                elif key.lower() == 'i':
-                    current_param = "I_GAIN"
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print(f"\nSelected I_GAIN: {balance_controller.pid.ki:.2f}")
-                
-                elif key.lower() == 'd':
-                    current_param = "D_GAIN"
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print(f"\nSelected D_GAIN: {balance_controller.pid.kd:.2f}")
-                
-                elif key.lower() == 'b':
-                    current_param = "DIRECTION_CHANGE_BOOST"
-                    boost_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0)
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print(f"\nSelected DIRECTION_CHANGE_BOOST: {boost_value:.2f}%")
-                
-                elif key.lower() == 'a':
-                    current_param = "IMU_FILTER_ALPHA"
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print(f"\nSelected IMU_FILTER_ALPHA: {balance_controller.imu.ALPHA:.2f}")
-                
-                elif key == '+':
-                    # Regular increment (by 1.0)
-                    if current_param == "P_GAIN":
-                        balance_controller.pid.kp += 1.0
-                        CONFIG['P_GAIN'] = balance_controller.pid.kp
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nIncreased P_GAIN to {balance_controller.pid.kp:.2f}")
-                    elif current_param == "I_GAIN":
-                        balance_controller.pid.ki += 1.0
-                        CONFIG['I_GAIN'] = balance_controller.pid.ki
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nIncreased I_GAIN to {balance_controller.pid.ki:.2f}")
-                    elif current_param == "D_GAIN":
-                        balance_controller.pid.kd += 1.0
-                        CONFIG['D_GAIN'] = balance_controller.pid.kd
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nIncreased D_GAIN to {balance_controller.pid.kd:.2f}")
-                    elif current_param == "DIRECTION_CHANGE_BOOST":
-                        boost_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0) + 5.0
-                        boost_value = min(100.0, boost_value)  # Cap at 100%
-                        CONFIG['DIRECTION_CHANGE_BOOST'] = boost_value
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nIncreased DIRECTION_CHANGE_BOOST to {boost_value:.2f}%")
-                    elif current_param == "IMU_FILTER_ALPHA":
-                        new_alpha = min(balance_controller.imu.ALPHA + 0.1, 1.0)
-                        balance_controller.imu.set_alpha(new_alpha)
-                        CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nIncreased IMU_FILTER_ALPHA to {new_alpha:.2f}")
-                
-                elif key == '-':
-                    # Regular decrement (by 1.0)
-                    if current_param == "P_GAIN":
-                        balance_controller.pid.kp = max(0.0, balance_controller.pid.kp - 1.0)
-                        CONFIG['P_GAIN'] = balance_controller.pid.kp
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nDecreased P_GAIN to {balance_controller.pid.kp:.2f}")
-                    elif current_param == "I_GAIN":
-                        balance_controller.pid.ki = max(0.0, balance_controller.pid.ki - 1.0)
-                        CONFIG['I_GAIN'] = balance_controller.pid.ki
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nDecreased I_GAIN to {balance_controller.pid.ki:.2f}")
-                    elif current_param == "D_GAIN":
-                        balance_controller.pid.kd = max(0.0, balance_controller.pid.kd - 1.0)
-                        CONFIG['D_GAIN'] = balance_controller.pid.kd
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nDecreased D_GAIN to {balance_controller.pid.kd:.2f}")
-                    elif current_param == "DIRECTION_CHANGE_BOOST":
-                        boost_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0) - 5.0
-                        boost_value = max(0.0, boost_value)  # Ensure non-negative
-                        CONFIG['DIRECTION_CHANGE_BOOST'] = boost_value
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nDecreased DIRECTION_CHANGE_BOOST to {boost_value:.2f}%")
-                    elif current_param == "IMU_FILTER_ALPHA":
-                        new_alpha = max(0.01, balance_controller.imu.ALPHA - 0.1)
-                        balance_controller.imu.set_alpha(new_alpha)
-                        CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nDecreased IMU_FILTER_ALPHA to {new_alpha:.2f}")
-                
-                elif key.lower() == 'w':  # Fine increment (previously '=')
-                    # Fine increment (by 0.1)
-                    if current_param == "P_GAIN":
-                        balance_controller.pid.kp += 0.1
-                        CONFIG['P_GAIN'] = balance_controller.pid.kp
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine increased P_GAIN to {balance_controller.pid.kp:.2f}")
-                    elif current_param == "I_GAIN":
-                        balance_controller.pid.ki += 0.1
-                        CONFIG['I_GAIN'] = balance_controller.pid.ki
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine increased I_GAIN to {balance_controller.pid.ki:.2f}")
-                    elif current_param == "D_GAIN":
-                        balance_controller.pid.kd += 0.1
-                        CONFIG['D_GAIN'] = balance_controller.pid.kd
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine increased D_GAIN to {balance_controller.pid.kd:.2f}")
-                    elif current_param == "DIRECTION_CHANGE_BOOST":
-                        boost_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0) + 1.0
-                        boost_value = min(100.0, boost_value)  # Cap at 100%
-                        CONFIG['DIRECTION_CHANGE_BOOST'] = boost_value
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine increased DIRECTION_CHANGE_BOOST to {boost_value:.2f}%")
-                    elif current_param == "IMU_FILTER_ALPHA":
-                        new_alpha = min(balance_controller.imu.ALPHA + 0.01, 1.0)
-                        balance_controller.imu.set_alpha(new_alpha)
-                        CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine increased IMU_FILTER_ALPHA to {new_alpha:.2f}")
-                
-                elif key.lower() == 's':  # Fine decrement (previously '_')
-                    # Fine decrement (by 0.1)
-                    if current_param == "P_GAIN":
-                        balance_controller.pid.kp = max(0.0, balance_controller.pid.kp - 0.1)
-                        CONFIG['P_GAIN'] = balance_controller.pid.kp
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine decreased P_GAIN to {balance_controller.pid.kp:.2f}")
-                    elif current_param == "I_GAIN":
-                        balance_controller.pid.ki = max(0.0, balance_controller.pid.ki - 0.1)
-                        CONFIG['I_GAIN'] = balance_controller.pid.ki
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine decreased I_GAIN to {balance_controller.pid.ki:.2f}")
-                    elif current_param == "D_GAIN":
-                        balance_controller.pid.kd = max(0.0, balance_controller.pid.kd - 0.1)
-                        CONFIG['D_GAIN'] = balance_controller.pid.kd
-                        # Update web interface
-                        set_pid_params(balance_controller.pid.kp, balance_controller.pid.ki, balance_controller.pid.kd, 0.0)
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine decreased D_GAIN to {balance_controller.pid.kd:.2f}")
-                    elif current_param == "DIRECTION_CHANGE_BOOST":
-                        boost_value = CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0) - 1.0
-                        boost_value = max(0.0, boost_value)  # Ensure non-negative
-                        CONFIG['DIRECTION_CHANGE_BOOST'] = boost_value
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine decreased DIRECTION_CHANGE_BOOST to {boost_value:.2f}%")
-                    elif current_param == "IMU_FILTER_ALPHA":
-                        new_alpha = max(0.01, balance_controller.imu.ALPHA - 0.01)
-                        balance_controller.imu.set_alpha(new_alpha)
-                        CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                        sys.stdout.write("\r\033[K")  # Clear line
-                        print(f"\nFine decreased IMU_FILTER_ALPHA to {new_alpha:.2f}")
-                
-                elif key.lower() == 'l':
-                    # List all parameters
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print("\nCurrent parameters:")
-                    print(f"P_GAIN: {balance_controller.pid.kp:.2f}")
-                    print(f"I_GAIN: {balance_controller.pid.ki:.2f}")
-                    print(f"D_GAIN: {balance_controller.pid.kd:.2f}")
-                    print(f"DIRECTION_CHANGE_BOOST: {CONFIG.get('DIRECTION_CHANGE_BOOST', 20.0):.2f}%")
-                    print(f"IMU_FILTER_ALPHA: {balance_controller.imu.ALPHA:.2f}")
-                    print(f"MOTOR_DEADBAND: {CONFIG.get('MOTOR_DEADBAND', 60)}")
-                    print(f"MAX_MOTOR_SPEED: {CONFIG.get('MAX_MOTOR_SPEED', 100)}")
-                    print(f"SAFE_TILT_LIMIT: {CONFIG.get('SAFE_TILT_LIMIT', 45)}")
-                    print(f"MAX_I_TERM: {CONFIG.get('MAX_I_TERM', 20)}")
-                
-                elif key.lower() == 'v':  # Using 'v' for save since 's' is now used for fine decrement
-                    # Save configuration
-                    from config import save_config
-                    save_config(CONFIG)
-                    sys.stdout.write("\r\033[K")  # Clear line
-                    print("\nConfiguration saved successfully!")
-    
-    except Exception as e:
-        print(f"\nError in tuning mode: {e}")
-        
-    finally:
-        # Restore terminal settings
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        
-        # Ensure balancing stops
-        balance_controller.stop_balancing()
-        print("Stopping balancing...")
-        balancing_thread.join(timeout=1.0)
-        
-        # Stop the web server
-        stop_server()
-        
-        print("Runtime tuning exited.")
+    # The balance_controller will return when 'Q' is pressed
+    # At this point, we just need to ensure the server is stopped properly
+    stop_server()
 
 def imu_tuning_mode(imu):
     """

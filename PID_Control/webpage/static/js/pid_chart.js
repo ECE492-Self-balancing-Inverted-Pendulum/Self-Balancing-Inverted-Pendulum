@@ -273,15 +273,20 @@ function initializeCharts() {
     });
 }
 
-// Fetch data from the server
+// Fetch data from the server with improved error handling and retry
 function fetchData() {
     if (!angleChart || !pidTermsChart) {
         console.error('Charts not initialized');
         return;
     }
     
-    fetch('/api/data')
+    // Add a timeout for the fetch operation
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+    
+    fetch('/api/data', { signal: controller.signal })
         .then(response => {
+            clearTimeout(timeoutId);
             if (!response.ok) {
                 throw new Error(`Network response was not ok: ${response.status}`);
             }
@@ -291,14 +296,37 @@ function fetchData() {
             if (data && Array.isArray(data.data) && data.data.length > 0) {
                 updateCharts(data.data);
                 updateConnectionStatus(true);
+                
+                // Reset error counter on successful fetch
+                window.fetchErrorCount = 0;
             } else {
                 console.warn('No data received or empty data array');
                 updateConnectionStatus(false);
             }
         })
         .catch(error => {
-            console.error('Error fetching data:', error);
+            // Don't log abort errors as they're expected when timeouts occur
+            if (error.name !== 'AbortError') {
+                console.error('Error fetching data:', error);
+            }
+            
             updateConnectionStatus(false);
+            
+            // Implement progressive backoff for retries
+            if (!window.fetchErrorCount) window.fetchErrorCount = 0;
+            window.fetchErrorCount++;
+            
+            // After 3 consecutive errors, show an error message to the user
+            if (window.fetchErrorCount >= 3 && typeof showError === 'function') {
+                showError('Connection to server lost. Attempting to reconnect...');
+            }
+        })
+        .finally(() => {
+            // Always ensure the data interval is active
+            if (!window.dataIntervalActive) {
+                window.dataIntervalActive = true;
+                window.dataInterval = setInterval(fetchData, config.updateInterval);
+            }
         });
 }
 
@@ -365,7 +393,7 @@ function combineTimeAndValues(times, values) {
     }));
 }
 
-// Update connection status indicator
+// Update connection status indicator with improved feedback
 function updateConnectionStatus(isConnected) {
     const statusElement = document.getElementById('connectionStatus');
     if (!statusElement) return;
@@ -376,6 +404,14 @@ function updateConnectionStatus(isConnected) {
         if (isConnected) {
             statusElement.textContent = 'Connected';
             statusElement.className = 'connection-badge bg-success text-white';
+            
+            // If we were previously disconnected and showing an error, clear it
+            if (typeof showError === 'function' && window.fetchErrorCount >= 3) {
+                const errorAlert = document.getElementById('errorAlert');
+                if (errorAlert && !errorAlert.classList.contains('d-none')) {
+                    errorAlert.classList.add('d-none');
+                }
+            }
         } else {
             statusElement.textContent = 'Disconnected';
             statusElement.className = 'connection-badge bg-danger text-white';

@@ -55,10 +55,12 @@ def load_pid_params():
 
 # Save PID parameters to file
 def save_pid_params():
+    """Save PID parameters to file with proper error handling and thread safety"""
     try:
-        with open(CONFIG['pid_config_file'], 'w') as f:
-            json.dump(PID_PARAMS, f, indent=4)
-            logger.info(f"Saved PID parameters: {PID_PARAMS}")
+        with LOCK:  # Use thread lock when accessing shared resources
+            with open(CONFIG['pid_config_file'], 'w') as f:
+                json.dump(PID_PARAMS, f, indent=4)
+                logger.info(f"Saved PID parameters: {PID_PARAMS}")
     except Exception as e:
         logger.error(f"Error saving PID parameters: {e}")
 
@@ -170,10 +172,19 @@ def update_pid_params():
     try:
         data = request.json
         
-        # Update the parameters
-        for key in ['kp', 'ki', 'kd', 'target_angle']:
-            if key in data:
-                PID_PARAMS[key] = float(data[key])
+        # Update the parameters with thread safety
+        with LOCK:
+            # Validate parameters before updating
+            for key in ['kp', 'ki', 'kd', 'target_angle']:
+                if key in data:
+                    try:
+                        # Convert to float and validate ranges
+                        value = float(data[key])
+                        if key in ['kp', 'ki', 'kd'] and value < 0:
+                            return jsonify({"error": f"Parameter {key} cannot be negative"}), 400
+                        PID_PARAMS[key] = value
+                    except ValueError:
+                        return jsonify({"error": f"Invalid value for {key}"}), 400
         
         logger.info(f"Updated PID parameters: {PID_PARAMS}")
         
@@ -205,44 +216,102 @@ def restart_pid():
 # Serve static files
 @app.route('/static/<path:path>')
 def serve_static(path):
+    """
+    Serve static files with proper caching headers and error handling
+    
+    Args:
+        path: Relative path to the static file
+    """
     try:
-        return send_from_directory('static', path)
+        # Determine content type based on file extension
+        content_type = None
+        if path.endswith('.js'):
+            content_type = 'application/javascript'
+        elif path.endswith('.css'):
+            content_type = 'text/css'
+        elif path.endswith('.png'):
+            content_type = 'image/png'
+        elif path.endswith('.jpg') or path.endswith('.jpeg'):
+            content_type = 'image/jpeg'
+        
+        # Add appropriate headers when applicable
+        headers = {}
+        if content_type:
+            headers['Content-Type'] = content_type
+            
+        # Add caching headers for improved performance
+        headers['Cache-Control'] = 'public, max-age=86400'  # Cache for 24 hours
+            
+        return send_from_directory('static', path, headers=headers)
     except Exception as e:
-        logger.error(f"Error serving static file: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error serving static file {path}: {e}")
+        return jsonify({"error": f"File not found: {path}"}), 404
 
 # Add a new data point
 def add_data_point(timestamp, actual_angle, target_angle, pid_error, p_term, i_term, d_term, pid_output):
+    """
+    Add a new data point to the PID data store with thread safety and data validation.
+    
+    Args:
+        timestamp: Current time in seconds since epoch
+        actual_angle: Measured angle from the IMU
+        target_angle: Desired angle setpoint
+        pid_error: Error between target and actual angle
+        p_term: Proportional term calculated by PID controller
+        i_term: Integral term calculated by PID controller
+        d_term: Derivative term calculated by PID controller
+        pid_output: Overall PID controller output
+    """
     with LOCK:
-        # Create the data point
-        data_point = {
-            "timestamp": timestamp,
-            "actual_angle": actual_angle,
-            "target_angle": target_angle,
-            "pid_error": pid_error,
-            "p_term": p_term,
-            "i_term": i_term,
-            "d_term": d_term,
-            "pid_output": pid_output
-        }
-        
-        # Add to the data array
-        PID_DATA.append(data_point)
-        
-        # Trim the data if it exceeds the maximum
-        if len(PID_DATA) > CONFIG['max_data_points']:
-            PID_DATA.pop(0)
-        
-        # Log to CSV if enabled
-        if CONFIG['csv_logging'] and CSV_WRITER:
+        try:
+            # Validate inputs - convert to floats and handle potential errors
             try:
-                CSV_WRITER.writerow([
-                    timestamp, actual_angle, target_angle, pid_error, 
-                    p_term, i_term, d_term, pid_output
-                ])
-                CSV_FILE.flush()
-            except Exception as e:
-                logger.error(f"Error logging to CSV: {e}")
+                timestamp = float(timestamp)
+                actual_angle = float(actual_angle)
+                target_angle = float(target_angle)
+                pid_error = float(pid_error)
+                p_term = float(p_term)
+                i_term = float(i_term) 
+                d_term = float(d_term)
+                pid_output = float(pid_output)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Data point validation error: {e}")
+                return
+                
+            # Create the data point
+            data_point = {
+                "timestamp": timestamp,
+                "actual_angle": actual_angle,
+                "target_angle": target_angle,
+                "pid_error": pid_error,
+                "p_term": p_term,
+                "i_term": i_term,
+                "d_term": d_term,
+                "pid_output": pid_output
+            }
+            
+            # Add to the data array
+            PID_DATA.append(data_point)
+            
+            # Trim the data if it exceeds the maximum - remove multiple points if needed
+            # to avoid frequent trimming operations
+            if len(PID_DATA) > CONFIG['max_data_points']:
+                # Remove the oldest 10% of data points when limit is reached
+                points_to_remove = max(1, int(CONFIG['max_data_points'] * 0.1))
+                PID_DATA[:points_to_remove] = []
+            
+            # Log to CSV if enabled
+            if CONFIG['csv_logging'] and CSV_WRITER:
+                try:
+                    CSV_WRITER.writerow([
+                        timestamp, actual_angle, target_angle, pid_error, 
+                        p_term, i_term, d_term, pid_output
+                    ])
+                    CSV_FILE.flush()
+                except Exception as e:
+                    logger.error(f"Error logging to CSV: {e}")
+        except Exception as e:
+            logger.error(f"Error adding data point: {e}")
 
 # Start CSV logging
 def start_csv_logging():
@@ -288,8 +357,19 @@ def shutdown_server():
     try:
         if SERVER_STARTED:
             logger.info("Shutting down server...")
+            # Stop CSV logging
             stop_csv_logging()
+            
+            # Final save of parameters
+            if os.path.exists(CONFIG['pid_config_file']):
+                save_pid_params()
+                
+            # Clear any in-memory data that's no longer needed
+            with LOCK:
+                PID_DATA.clear()
+                
             SERVER_STARTED = False
+            logger.info("Server shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 
@@ -330,17 +410,29 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
 
 # Stop the web server
 def stop_server():
-    global SERVER_STARTED
+    global SERVER_STARTED, SERVER_INSTANCE
     
     if not SERVER_STARTED:
         logger.warning("Server is not running")
         return
     
     try:
+        # Call shutdown handler
         shutdown_server()
+        
+        # If server was started in a thread, wait for it to finish
+        # This is best-effort since Flask doesn't have a clean shutdown mechanism
+        # when running in a thread
+        if SERVER_INSTANCE and SERVER_INSTANCE.is_alive():
+            logger.info("Waiting for server thread to finish...")
+            SERVER_INSTANCE.join(timeout=2.0)  # Wait up to 2 seconds
+            
+        SERVER_INSTANCE = None
         logger.info("Server stopped")
     except Exception as e:
         logger.error(f"Error stopping server: {e}")
+    finally:
+        SERVER_STARTED = False
 
 # Check if server is running
 def is_server_running():
