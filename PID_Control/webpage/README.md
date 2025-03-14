@@ -1,196 +1,105 @@
 # PID Controller Web Dashboard
 
-This module provides a web-based interface for monitoring and tuning the self-balancing robot's PID controller in real-time.
+A simplified web-based dashboard for monitoring and controlling a PID controller for a self-balancing robot.
 
 ## Features
 
 - Real-time visualization of robot angle and PID terms
+- Vertically stacked charts for better readability
 - Live parameter tuning with immediate feedback
-- Data logging to CSV files
-- Responsive design works on mobile devices
-- Compatible with Raspberry Pi
+- Data logging to CSV
+- Mobile-friendly responsive design
+- Clean, single-file server implementation for simplicity
+
+## Architecture
+
+The web dashboard consists of just a few files for simplicity:
+
+- `web_server.py`: Single-file server implementation that handles all backend functionality
+- `templates/index.html`: The main HTML template with responsive layout
+- `static/js/pid_chart.js`: JavaScript for chart rendering and data handling
 
 ## Setup
 
 ### Installation
 
-On your Raspberry Pi, install the required dependencies:
+1. Ensure you have the required dependencies:
+   ```
+   pip install flask
+   ```
 
-```bash
-# Activate your virtual environment if using one
-source .venv/bin/activate  # Optional, if using venv
-
-# Install required packages
-pip install flask
-```
+2. Make sure your project includes the `webpage` directory in your main project folder.
 
 ### Running the Dashboard
 
-The web dashboard starts automatically when using the runtime parameter tuning mode (option 5 in the main menu).
+#### Automatic Mode
 
-You can also start it programmatically:
+The dashboard can start automatically when your main robot program runs:
 
 ```python
-from webpage import start_server, stop_server
+from webpage.web_server import start_server, stop_server, add_data_point
 
-# Start the server (by default on port 5000)
-start_server(port=5000)
+# Start the web server
+start_server(host='0.0.0.0', port=5000)
 
-# ... your code here ...
+# In your main loop, add data points
+add_data_point(
+    timestamp=time.time(),
+    actual_angle=sensor_angle,
+    target_angle=0.0,
+    pid_error=error,
+    p_term=p_component,
+    i_term=i_component,
+    d_term=d_component,
+    pid_output=output
+)
 
-# Stop the server when done
+# When exiting, stop the server
 stop_server()
+```
+
+#### Manual Mode
+
+You can also run the web server directly:
+
+```
+python -m webpage.web_server
 ```
 
 ### Accessing the Dashboard
 
-Access the dashboard from any device on the same network by navigating to:
-
-```
-http://YOUR_RASPBERRY_PI_IP:5000
-```
-
-Replace `YOUR_RASPBERRY_PI_IP` with your Raspberry Pi's IP address.
+Open a web browser and go to:
+- Local access: `http://localhost:5000`
+- Remote access (from another device): `http://<raspberry-pi-ip>:5000`
 
 ## Troubleshooting
 
-### Dashboard not loading
+### Dashboard Not Loading
+- Check that the server is running (`is_server_running()` function)
+- Verify that you can access the Pi's IP address from your device
+- Check console log for errors
 
-1. Check if Flask is installed correctly: `pip list | grep flask`
-2. Ensure your Raspberry Pi's firewall allows connections on port 5000
-3. Verify you're trying to access the correct IP address
-4. Check if other services are using port 5000, and change the port if needed
+### No Data Showing in Charts
+- Ensure your main loop is calling `add_data_point()` regularly
+- Check the server console logs for data processing errors
 
-### No data showing in charts
-
-1. Make sure the PID controller is running
-2. Check the console logs for errors
-3. Verify the `debug_callback` function is being called in the balance controller
-
-### Slow performance
-
-1. Reduce the update interval (using the slider in the Settings panel)
-2. Clear old data from the charts by restarting the PID controller
-3. Make sure your Raspberry Pi isn't overheating (check CPU temperature)
+### Slow Performance
+- Reduce the update interval in the dashboard settings
+- If running on Raspberry Pi Zero, consider reducing the maximum data points stored
 
 ## API Endpoints
 
-The dashboard exposes the following API endpoints:
+- `/api/data` - GET: Retrieve all PID data points
+- `/api/pid_params` - GET/POST: Get or update PID parameters
+- `/api/config` - GET/POST: Get or update dashboard configuration
+- `/api/restart` - POST: Restart the PID controller
 
-- `/api/pid_data` - GET: Returns current PID data
-- `/api/pid_params` - GET/POST: Read or update PID parameters
-- `/api/config` - GET/POST: Read or update dashboard configuration
-- `/api/restart_pid` - POST: Restart the PID controller
+## Parameters
 
-## Dependencies
+The dashboard allows you to tune these PID parameters:
+- KP (Proportional Gain)
+- KI (Integral Gain)
+- KD (Derivative Gain)
+- Target Angle
 
-- Flask: Web server framework
-- Chart.js: JavaScript charting library
-- Bootstrap: CSS framework for responsive design
-
-## Package Structure
-
-The web dashboard is organized into the following modules:
-
-- `__init__.py`: Package initialization that exports the main functions (`add_data_point`, `start_server`, `stop_server`) for external use.
-
-- `app.py`: Flask application factory that creates and configures the web app with appropriate settings and routes.
-
-- `config.py`: Contains all configuration settings, constants, and global state like data storage dictionaries and thread locks.
-
-- `data_manager.py`: Handles all data operations including storage, filtering, and CSV logging. Maintains a circular buffer of PID data points.
-
-- `routes.py`: Defines all API endpoints and URL routes for the web interface, including data retrieval and parameter updates.
-
-- `server.py`: Manages starting and stopping the Flask server in a separate thread, ensuring it doesn't block the main application.
-
-- `static_generator.py`: Dynamically generates and updates CSS, JavaScript and HTML template files for the web interface.
-
-## Directory Structure
-
-```
-webpage/
-├── __init__.py          # Package exports
-├── app.py               # Flask app configuration
-├── config.py            # Global settings
-├── data_manager.py      # Data handling
-├── routes.py            # API endpoints
-├── server.py            # Server management
-├── static_generator.py  # Static file generation
-├── static/              # Static web assets
-│   ├── css/             # Stylesheet files
-│   │   └── styles.css   # Main CSS styles
-│   └── js/              # JavaScript files
-│       └── pid_chart.js # Chart rendering and data handling
-└── templates/           # HTML templates
-    └── index.html       # Main dashboard layout
-```
-
-## Technical Details
-
-### Data Flow
-
-1. `add_data_point()` receives data from the PID controller
-2. Data is stored in memory buffers and optionally logged to CSV
-3. The web client fetches data through API endpoints at `/data`
-4. Chart.js visualizes the data on the client side
-
-### Thread Safety
-
-- All data access is protected with thread locks
-- The Flask server runs in a separate daemon thread
-- Communication between the main program and web server is done through shared data structures
-
-### Configuration Management
-
-- Web interface settings (time windows, update intervals, etc.) are stored in memory
-- PID controller parameters are read from and written to the main config file
-- Changes made through the web UI are immediately applied to the running controller
-
-## Usage
-
-```python
-# Import the package
-from webpage import start_server, stop_server, add_data_point
-
-# Start the server
-start_server(host='0.0.0.0', port=5000)
-
-# Send data to the web interface
-add_data_point(
-    actual_angle=roll,
-    target_angle=0.0, 
-    pid_error=pid_error,
-    p_term=p_term,
-    i_term=i_term,
-    d_term=d_term,
-    pid_output=output
-)
-
-# Stop the server when done
-stop_server()
-```
-
-## Web UI
-
-The web interface is accessible at `http://<host>:<port>` and includes:
-
-1. Angle chart showing actual, target, and error values
-2. PID components chart showing P, I, D terms and output
-3. Controls for adjusting time window, update interval, and data logging
-4. Sliders for tuning PID parameters
-
-## Development
-
-To extend or modify the web dashboard:
-
-1. Edit `static_generator.py` to update CSS or JavaScript
-2. Modify `routes.py` to add new API endpoints
-3. Update `data_manager.py` to change data handling
-
-Run the server in debug mode for development:
-
-```python
-from webpage import start_server
-start_server(debug=True)
-``` 
+All changes to parameters are automatically saved to a JSON file (`pid_config.json`) and will be reloaded when the server restarts. 
