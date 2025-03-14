@@ -12,7 +12,7 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from pid_controller import PIDController
-from webpage import start_server, stop_server, add_data_point, set_pid_params, update_pid_params, set_update_callback
+from webpage import start_server, stop_server, add_data_point, PID_PARAMS
 
 def runtime_parameter_tuning(pid_tuner, balance_controller):
     """
