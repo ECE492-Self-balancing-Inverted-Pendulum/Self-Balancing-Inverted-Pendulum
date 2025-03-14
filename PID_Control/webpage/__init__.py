@@ -86,7 +86,7 @@ def set_update_callback(callback):
         _update_callback = callback
         logger.info("Parameter update callback registered (note: direct callbacks not used in new implementation)")
 
-def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pid_output=0):
+def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pid_output=0, motor_output=None):
     """
     Legacy function for backward compatibility - adds a data point with auto-generated timestamp
     
@@ -98,9 +98,12 @@ def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pi
         i_term: Integral term calculated by PID controller
         d_term: Derivative term calculated by PID controller
         pid_output: Overall PID controller output (default: 0)
+        motor_output: Motor output percentage (default: None, will use abs(pid_output) if not provided)
     """
     try:
         timestamp = time.time()
+        # Use motor_output if provided, otherwise default to abs(pid_output)
+        motor_out = motor_output if motor_output is not None else abs(pid_output)
         new_add_data_point(
             timestamp=timestamp,
             actual_angle=actual_angle,
@@ -109,7 +112,8 @@ def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pi
             p_term=p_term,
             i_term=i_term,
             d_term=d_term,
-            pid_output=pid_output
+            pid_output=pid_output,
+            motor_output=motor_out
         )
     except Exception as e:
         logger.error(f"Error in add_data_point: {e}")

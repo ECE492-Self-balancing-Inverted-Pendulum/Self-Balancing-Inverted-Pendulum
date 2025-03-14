@@ -15,20 +15,27 @@ class BalanceController:
     
     def __init__(self, imu, motor, config):
         """
-        Initialize the balance controller.
+        Initialize the balance controller with an IMU and motor control.
         
         Args:
-            imu: IMU reader object
-            motor: Motor controller object (either MotorControl or DualMotorControl)
+            imu: IMU reader instance
+            motor: Motor control instance
             config: Configuration dictionary
         """
         self.imu = imu
         self.motor = motor
         self.config = config
+        
+        # Initialize PID controller
         self.pid = PIDController(config)
-        self.running = False
+        
+        # Store sample time from config, can be updated at runtime
+        self.sample_time = config['SAMPLE_TIME']
+        
+        # For direction change boosting
         self.last_direction = None
         self.enable_debug = True  # Enable debug output by default
+        self.running = False
         
         # Determine if we're using dual motors
         self.using_dual_motors = isinstance(self.motor, DualMotorControl)
@@ -125,8 +132,8 @@ class BalanceController:
                 dt = current_time - last_time
                 
                 # Ensure minimum sample time
-                if dt < self.config['SAMPLE_TIME']:
-                    time.sleep(self.config['SAMPLE_TIME'] - dt)
+                if dt < self.sample_time:
+                    time.sleep(self.sample_time - dt)
                     current_time = time.time()
                     dt = current_time - last_time
                 

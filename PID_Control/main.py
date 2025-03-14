@@ -59,9 +59,22 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if 'kd' in params:
             balance_controller.pid.kd = params['kd']
             CONFIG['D_GAIN'] = params['kd']
+        if 'alpha' in params:
+            # Update the IMU alpha filter
+            imu.set_alpha(params['alpha'])
+            CONFIG['IMU_FILTER_ALPHA'] = params['alpha']
+        if 'sample_time' in params:
+            # Convert from milliseconds to seconds
+            sample_time_sec = params['sample_time'] / 1000.0
+            balance_controller.sample_time = sample_time_sec
+            CONFIG['SAMPLE_TIME'] = sample_time_sec
+        
+        # Save config to file
+        from config import save_config
+        save_config(CONFIG)
         
         # Print on a separate line with newline to avoid text overlapping
-        print(f"\nParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}")
+        print(f"\nParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}, Alpha={imu.ALPHA:.2f}, Sample Time={balance_controller.sample_time*1000:.0f}ms")
     
     # Register the callback
     set_update_callback(params_update_callback)
