@@ -10,5 +10,6 @@
     "SAMPLE_TIME": 0.01,
     "IN1_PIN": 13,
     "IN2_PIN": 19,
-    "IMU_FILTER_ALPHA": 0.2
+    "IMU_FILTER_ALPHA": 0.2,
+    "DIRECTION_CHANGE_BOOST": 10.0
 }

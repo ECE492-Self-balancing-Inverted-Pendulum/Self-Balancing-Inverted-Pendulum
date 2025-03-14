@@ -367,7 +367,7 @@ def main():
                 balance_controller = BalanceController(imu, motors, CONFIG)
             elif choice == '4':
                 # Quick tuning of just the P, I, and D gains
-                pid_tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN', 'IMU_FILTER_ALPHA'])
+                pid_tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN', 'IMU_FILTER_ALPHA', 'DIRECTION_CHANGE_BOOST'])
                 # Update the balance controller with the new configuration
                 balance_controller = BalanceController(imu, motors, CONFIG)
             elif choice == '5':

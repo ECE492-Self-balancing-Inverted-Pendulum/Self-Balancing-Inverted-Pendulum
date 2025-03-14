@@ -17,13 +17,13 @@ DEFAULT_CONFIG = {
     'MOTOR_DEADBAND': 60,  # Motor doesn't move below this value (0-100)
     'MAX_MOTOR_SPEED': 100, # Maximum motor speed (0-100)
     'SAFE_TILT_LIMIT': 45,  # Safety cutoff angle in degrees
-    'DIRECTION_CHANGE_BOOST': 20.0,  # Percentage boost when changing direction (0-100)
+    'DIRECTION_CHANGE_BOOST': 10.0,  # Percentage boost when changing direction (0-100)
     
     # Loop timing
     'SAMPLE_TIME': 0.01,  # Time between PID updates (seconds)
     
     # IMU parameters
-    'IMU_FILTER_ALPHA': 0.3,     # Low-pass filter coefficient (0-1)
+    'IMU_FILTER_ALPHA': 0.2,     # Low-pass filter coefficient (0-1)
     'IMU_UPSIDE_DOWN': True,     # Set to True if IMU is mounted upside down
 }
 

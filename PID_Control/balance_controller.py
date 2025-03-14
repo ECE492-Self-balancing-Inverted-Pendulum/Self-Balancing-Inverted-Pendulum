@@ -71,7 +71,7 @@ class BalanceController:
         # Apply boost when changing direction to overcome inertia
         if self.last_direction != direction and direction != "stop":
             # Add a boost when changing direction to overcome inertia
-            boost_percent = self.config.get('DIRECTION_CHANGE_BOOST', 20)
+            boost_percent = self.config['DIRECTION_CHANGE_BOOST']
             speed = min(100, speed * (1 + boost_percent / 100.0))
         
         # Save current direction for next iteration
