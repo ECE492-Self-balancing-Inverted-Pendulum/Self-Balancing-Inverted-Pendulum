@@ -303,6 +303,9 @@
         document.getElementById('pid-form').addEventListener('submit', function(event) {
             event.preventDefault();
             
+            // Show a loading message
+            showToast('Updating parameters...', 'info');
+            
             const params = {
                 kp: parseFloat(document.getElementById('kp-input').value),
                 ki: parseFloat(document.getElementById('ki-input').value),
@@ -310,6 +313,13 @@
                 alpha: parseFloat(document.getElementById('alpha-input').value),
                 sample_time: parseFloat(document.getElementById('sample-time-input').value)
             };
+            
+            // Validate values before sending
+            if (isNaN(params.kp) || isNaN(params.ki) || isNaN(params.kd) || 
+                isNaN(params.alpha) || isNaN(params.sample_time)) {
+                showError('Invalid parameter values. Please check your inputs.');
+                return;
+            }
             
             fetch('/api/pid_params', {
                 method: 'POST',
@@ -320,13 +330,22 @@
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`Network error: ${response.status}`);
+                    return response.json().then(err => {
+                        throw new Error(err.error || `Network error: ${response.status}`);
+                    });
                 }
                 return response.json();
             })
             .then(data => {
                 updatePIDParams();
-                showToast('Parameters updated successfully!');
+                showToast('Parameters updated successfully!', 'success');
+                
+                // Update sliders to match input values
+                document.getElementById('kp-slider').value = params.kp;
+                document.getElementById('ki-slider').value = params.ki;
+                document.getElementById('kd-slider').value = params.kd;
+                document.getElementById('alpha-slider').value = params.alpha;
+                document.getElementById('sample-time-slider').value = params.sample_time;
             })
             .catch(error => {
                 console.error('Error:', error);

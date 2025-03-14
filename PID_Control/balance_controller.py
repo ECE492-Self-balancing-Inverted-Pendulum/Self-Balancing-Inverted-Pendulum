@@ -54,11 +54,13 @@ class BalanceController:
         Returns:
             Tuple of (output, speed, direction)
         """
-        # Determine direction based on sign of output
+        # Determine direction based on sign of output - INVERTED to counter tilt
+        # A negative output (robot tilting forward) should move motors backward (counterclockwise)
+        # A positive output (robot tilting backward) should move motors forward (clockwise)
         if output > 0:
-            direction = "clockwise"
+            direction = "counterclockwise"  # Inverted from previous behavior
         else:
-            direction = "counterclockwise"
+            direction = "clockwise"  # Inverted from previous behavior
         
         # Take absolute value for speed
         speed = abs(output)

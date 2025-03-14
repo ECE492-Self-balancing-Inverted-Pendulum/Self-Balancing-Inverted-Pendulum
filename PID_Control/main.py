@@ -89,13 +89,18 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         motor_output = debug_info.get('motor_output', abs(output))  # Get motor output percentage
         pid_info = debug_info['pid']
         
-        # Display angle in terminal (similar to option 1) 
-        # Use carriage return to overwrite the line and prevent text overlap
-        if balance_controller.enable_debug:
+        # Use a static variable to track the last output time
+        if not hasattr(debug_callback, 'last_output_time'):
+            debug_callback.last_output_time = 0
+        
+        current_time = time.time()
+        # Limit terminal updates to once every 0.5 seconds to prevent clutter
+        if balance_controller.enable_debug and (current_time - debug_callback.last_output_time > 0.5):
             # Clear the line completely before writing
             sys.stdout.write("\r" + " " * 80)  # Write 80 spaces to clear the line
             sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | Motor: {motor_output:3.0f}% | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
             sys.stdout.flush()
+            debug_callback.last_output_time = current_time
         
         # Send data to web dashboard
         add_data_point(
