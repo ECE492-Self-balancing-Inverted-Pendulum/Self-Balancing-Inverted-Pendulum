@@ -74,13 +74,21 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             sample_time_sec = params['sample_time'] / 1000.0
             balance_controller.sample_time = sample_time_sec
             CONFIG['SAMPLE_TIME'] = sample_time_sec
+        if 'deadband' in params:
+            # Update the motor deadband
+            CONFIG['MOTOR_DEADBAND'] = params['deadband']
+        if 'max_speed' in params:
+            # Update the max motor speed
+            CONFIG['MAX_MOTOR_SPEED'] = params['max_speed']
         
         # Save config to file
         from config import save_config
         save_config(CONFIG)
         
-        # Print on a separate line with newline to avoid text overlapping
-        print(f"\nParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}, Alpha={imu.ALPHA:.2f}, Sample Time={balance_controller.sample_time*1000:.0f}ms")
+        # Update parameters in a single line instead of printing a new line
+        sys.stdout.write("\r" + " " * 100)  # Clear the line with more spaces
+        sys.stdout.write(f"\rParameters updated: KP={balance_controller.pid.kp:.2f}, KI={balance_controller.pid.ki:.2f}, KD={balance_controller.pid.kd:.2f}, Alpha={imu.ALPHA:.2f}, Time={balance_controller.sample_time*1000:.0f}ms, Deadband={CONFIG['MOTOR_DEADBAND']}, Max={CONFIG['MAX_MOTOR_SPEED']}")
+        sys.stdout.flush()
     
     # Register the callback
     set_update_callback(params_update_callback)
