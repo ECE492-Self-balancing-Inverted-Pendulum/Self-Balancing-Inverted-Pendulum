@@ -51,7 +51,12 @@ class BalanceController:
         Args:
             output (float): PID controller output (-100 to 100)
         """
-        output = max(-100, min(100, output))  # Clamp between -100 and 100
+        # Get deadband and max speed from config
+        deadband = self.config.get('MOTOR_DEADBAND', 0)
+        max_speed = self.config.get('MAX_MOTOR_SPEED', 100)
+        
+        # Clamp output between -100 and 100
+        output = max(-100, min(100, output))
         
         # Determine the direction
         if output > 0:
@@ -61,6 +66,13 @@ class BalanceController:
         
         # Set the motor speed (absolute value of output)
         speed = abs(output)
+        
+        # Apply deadband - if speed is below deadband, set to 0
+        if speed < deadband:
+            speed = 0
+        
+        # Apply max speed limit
+        speed = min(speed, max_speed)
         
         # Apply to motors using the motor driver
         if self.using_dual_motors:
@@ -75,7 +87,7 @@ class BalanceController:
         Start the self-balancing control loop.
         
         Args:
-            debug_callback: Optional callback function for debugging and visualization
+            debug_callback: Optional callback function for debug output
         """
         print("\n🤖 Self-Balancing Mode Started!")
         print("Press 'Q' to return to main menu")
@@ -85,30 +97,29 @@ class BalanceController:
         self.pid.reset()
         self.last_direction = None
         
-        # Initial time for loop timing
-        last_time = time.time()
+        # Set up non-blocking input detection
         self.running = True
         
-        # Setup for non-blocking input detection
-        old_settings = None
-        if sys.stdin.isatty():
-            old_settings = termios.tcgetattr(sys.stdin)
-            tty.setraw(sys.stdin.fileno())
-        
-        # For tracking debug output timing
-        last_debug_time = 0
+        # Save terminal settings
+        old_settings = termios.tcgetattr(sys.stdin)
         
         try:
+            # Set terminal to raw mode
+            tty.setraw(sys.stdin.fileno())
+            
+            # Set up select for non-blocking input
+            last_time = time.time()
+            last_debug_time = time.time()
+            
+            # Main control loop
             while self.running:
-                # Check for 'Q' keypress to exit
-                if sys.stdin.isatty() and select.select([sys.stdin], [], [], 0.0)[0]:
+                # Check for keypress
+                if select.select([sys.stdin], [], [], 0)[0]:
                     key = sys.stdin.read(1)
                     if key.lower() == 'q':
-                        # Clear line before printing to avoid text overlap
-                        sys.stdout.write('\r' + ' ' * 80)
-                        sys.stdout.flush()
-                        print("\nReturning to main menu...")
-                        self.running = False
+                        # Restore terminal settings
+                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                        print("\nExiting balance mode...")
                         break
                 
                 # Calculate time delta
@@ -117,26 +128,25 @@ class BalanceController:
                 
                 # Ensure minimum sample time
                 if dt < self.sample_time:
-                    time.sleep(self.sample_time - dt)
-                    current_time = time.time()
-                    dt = current_time - last_time
+                    time.sleep(0.001)  # Small sleep to prevent CPU hogging
+                    continue
                 
                 # Get IMU data
-                imu_data = self.imu.get_imu_data()
-                roll = imu_data['roll']
-                angular_velocity = imu_data['angular_velocity']
+                roll, angular_velocity = self.imu.get_angle_and_rate()
                 
-                # Safety check - stop if tilt is too extreme
+                # Safety check - stop motors if tilt exceeds safe limit
                 if abs(roll) > self.config['SAFE_TILT_LIMIT']:
-                    # Clear line before printing to avoid text overlap
-                    sys.stdout.write('\r' + ' ' * 80)
+                    # Restore terminal settings before printing
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                    
+                    # Use a single line for the safety message
+                    sys.stdout.write("\r" + " " * 80)  # Clear the line
+                    sys.stdout.write("\r⚠️ Safety cutoff: Tilt exceeded limit! Motors stopped.")
                     sys.stdout.flush()
-                    print(f"\n⚠️ Safety cutoff: Tilt {roll:.2f}° exceeds limit of {self.config['SAFE_TILT_LIMIT']}°")
-                    if self.using_dual_motors:
-                        self.motor.stop_motors()
-                    else:
-                        self.motor.stop_motor()
-                    self.running = False
+                    
+                    # Stop motors
+                    self.motor.stop_motors() if self.using_dual_motors else self.motor.stop_motor()
+                    time.sleep(1)  # Give time to read the message
                     break
                 
                 # Update PID controller
@@ -177,7 +187,12 @@ class BalanceController:
                         last_debug_time = current_time
         
         except Exception as e:
-            print(f"\nError in balancing loop: {e}")
+            # Restore terminal settings before printing error
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            sys.stdout.write("\r" + " " * 80)  # Clear the line
+            sys.stdout.write(f"\rError in balancing loop: {e}")
+            sys.stdout.flush()
+            print()  # Add a newline after the error
         
         finally:
             # Restore terminal settings
@@ -190,7 +205,7 @@ class BalanceController:
             else:
                 self.motor.stop_motor()
             
-            print("\nBalancing stopped.")
+            self.running = False
     
     def stop_balancing(self):
         """Stop the balancing control loop."""

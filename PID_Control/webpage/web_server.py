@@ -59,7 +59,10 @@ PID_PARAMS = {
     'ki': 0.1,
     'kd': 0.01,
     'alpha': 0.2,
-    'sample_time': 10  # in milliseconds
+    'sample_time': 10,
+    'target_angle': 0.0,
+    'deadband': 10,
+    'max_speed': 90
 }
 CSV_FILE = None
 CSV_WRITER = None
@@ -70,40 +73,37 @@ LOCK = threading.Lock()
 # Create Flask app
 app = Flask(__name__, static_folder='static')
 
+# Import from the compatibility layer
+try:
+    from . import trigger_update_callback
+except ImportError:
+    # Define a dummy function if the import fails
+    def trigger_update_callback(params):
+        logger.warning("trigger_update_callback not available")
+
 # Load PID parameters from file if it exists
 def load_pid_params():
-    global PID_PARAMS
+    """Load PID parameters from robot_config.json if available"""
     try:
-        # First try to load from pid_config.json
-        if os.path.exists(CONFIG['pid_config_file']):
-            with open(CONFIG['pid_config_file'], 'r') as f:
-                loaded_params = json.load(f)
-                logger.info(f"Loaded PID parameters: {loaded_params}")
-                PID_PARAMS.update(loaded_params)
-        
-        # Then try to load from robot_config.json (this will override pid_config.json)
         robot_config_path = 'robot_config.json'
         if os.path.exists(robot_config_path):
             with open(robot_config_path, 'r') as f:
                 robot_config = json.load(f)
-                # Map robot_config to PID_PARAMS
-                mapping = {
-                    'P_GAIN': 'kp',
-                    'I_GAIN': 'ki',
-                    'D_GAIN': 'kd',
-                    'IMU_FILTER_ALPHA': 'alpha'
-                }
-                for robot_key, pid_key in mapping.items():
-                    if robot_key in robot_config:
-                        PID_PARAMS[pid_key] = robot_config[robot_key]
                 
-                # Handle sample_time separately (convert from seconds to milliseconds)
-                if 'SAMPLE_TIME' in robot_config:
-                    PID_PARAMS['sample_time'] = int(robot_config['SAMPLE_TIME'] * 1000)
-                
-                logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
+            # Update PID parameters from robot config
+            PID_PARAMS['kp'] = robot_config.get('P_GAIN', PID_PARAMS['kp'])
+            PID_PARAMS['ki'] = robot_config.get('I_GAIN', PID_PARAMS['ki'])
+            PID_PARAMS['kd'] = robot_config.get('D_GAIN', PID_PARAMS['kd'])
+            PID_PARAMS['alpha'] = robot_config.get('IMU_FILTER_ALPHA', PID_PARAMS['alpha'])
+            # Convert seconds to milliseconds for the web interface
+            PID_PARAMS['sample_time'] = int(robot_config.get('SAMPLE_TIME', 0.01) * 1000)
+            PID_PARAMS['deadband'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['deadband'])
+            PID_PARAMS['max_speed'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['max_speed'])
+            
+            logger.info(f"Loaded PID parameters: {PID_PARAMS}")
+            logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
     except Exception as e:
-        logger.error(f"Error loading PID parameters: {e}")
+        logger.error(f"Error loading PID parameters from robot_config.json: {e}")
 
 # Save PID parameters to file
 def save_pid_params():
@@ -227,7 +227,7 @@ def update_pid_params():
         # Update the parameters with thread safety
         with LOCK:
             # Validate parameters before updating
-            for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time']:
+            for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time', 'deadband', 'max_speed']:
                 if key in data:
                     try:
                         # Convert to float and validate ranges
@@ -238,6 +238,10 @@ def update_pid_params():
                             return jsonify({"error": "Alpha must be between 0.05 and 0.95"}), 400
                         elif key == 'sample_time' and (value < 5 or value > 20):
                             return jsonify({"error": "Sample time must be between 5 and 20 milliseconds"}), 400
+                        elif key == 'deadband' and (value < 0 or value > 60):
+                            return jsonify({"error": "Deadband must be between 0 and 60"}), 400
+                        elif key == 'max_speed' and (value < 60 or value > 100):
+                            return jsonify({"error": "Max speed must be between 60 and 100"}), 400
                         PID_PARAMS[key] = value
                     except ValueError:
                         return jsonify({"error": f"Invalid value for {key}"}), 400
@@ -267,12 +271,19 @@ def update_pid_params():
                 if 'sample_time' in data:
                     # Convert milliseconds to seconds for robot_config
                     robot_config['SAMPLE_TIME'] = data['sample_time'] / 1000.0
+                if 'deadband' in data:
+                    robot_config['MOTOR_DEADBAND'] = data['deadband']
+                if 'max_speed' in data:
+                    robot_config['MAX_MOTOR_SPEED'] = data['max_speed']
                 
                 # Save updated robot config
                 with open(robot_config_path, 'w') as f:
                     json.dump(robot_config, f, indent=4)
                     
                 logger.info(f"Updated robot_config.json with PID parameters")
+                
+                # Trigger the update callback to apply changes in real-time
+                trigger_update_callback(data)
         except Exception as e:
             logger.error(f"Error updating robot_config.json: {e}")
             # Continue anyway, as pid_config.json was successfully updated

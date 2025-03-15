@@ -188,6 +188,32 @@
                                 </div>
                                 <input type="range" class="form-range" id="sample-time-slider" min="5" max="20" step="1" value="10">
                             </div>
+                            <div class="mb-3">
+                                <label for="deadband-input" class="form-label">Motor Deadband</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="deadband-input" step="1" min="0" max="60">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="deadband-input">-1</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="deadband-input">+1</button>
+                                </div>
+                                <div class="slider-label">
+                                    <span>0 (No deadband)</span>
+                                    <span>60 (High deadband)</span>
+                                </div>
+                                <input type="range" class="form-range" id="deadband-slider" min="0" max="60" step="1" value="10">
+                            </div>
+                            <div class="mb-3">
+                                <label for="max-speed-input" class="form-label">Max Motor Speed</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="max-speed-input" step="1" min="60" max="100">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="max-speed-input">-1</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="max-speed-input">+1</button>
+                                </div>
+                                <div class="slider-label">
+                                    <span>60 (Slower)</span>
+                                    <span>100 (Faster)</span>
+                                </div>
+                                <input type="range" class="form-range" id="max-speed-slider" min="60" max="100" step="1" value="90">
+                            </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Update Parameters</button>
                             </div>
@@ -289,6 +315,17 @@
                     document.getElementById('kd-input').value = data.kd;
                     document.getElementById('alpha-input').value = data.alpha;
                     document.getElementById('sample-time-input').value = data.sample_time;
+                    document.getElementById('deadband-input').value = data.deadband || 10;
+                    document.getElementById('max-speed-input').value = data.max_speed || 90;
+                    
+                    // Update sliders to match input values
+                    document.getElementById('kp-slider').value = data.kp;
+                    document.getElementById('ki-slider').value = data.ki;
+                    document.getElementById('kd-slider').value = data.kd;
+                    document.getElementById('alpha-slider').value = data.alpha;
+                    document.getElementById('sample-time-slider').value = data.sample_time;
+                    document.getElementById('deadband-slider').value = data.deadband || 10;
+                    document.getElementById('max-speed-slider').value = data.max_speed || 90;
                 })
                 .catch(error => {
                     console.error('Error fetching PID parameters:', error);
@@ -311,12 +348,15 @@
                 ki: parseFloat(document.getElementById('ki-input').value),
                 kd: parseFloat(document.getElementById('kd-input').value),
                 alpha: parseFloat(document.getElementById('alpha-input').value),
-                sample_time: parseFloat(document.getElementById('sample-time-input').value)
+                sample_time: parseFloat(document.getElementById('sample-time-input').value),
+                deadband: parseFloat(document.getElementById('deadband-input').value),
+                max_speed: parseFloat(document.getElementById('max-speed-input').value)
             };
             
             // Validate values before sending
             if (isNaN(params.kp) || isNaN(params.ki) || isNaN(params.kd) || 
-                isNaN(params.alpha) || isNaN(params.sample_time)) {
+                isNaN(params.alpha) || isNaN(params.sample_time) ||
+                isNaN(params.deadband) || isNaN(params.max_speed)) {
                 showError('Invalid parameter values. Please check your inputs.');
                 return;
             }
@@ -339,13 +379,6 @@
             .then(data => {
                 updatePIDParams();
                 showToast('Parameters updated successfully!', 'success');
-                
-                // Update sliders to match input values
-                document.getElementById('kp-slider').value = params.kp;
-                document.getElementById('ki-slider').value = params.ki;
-                document.getElementById('kd-slider').value = params.kd;
-                document.getElementById('alpha-slider').value = params.alpha;
-                document.getElementById('sample-time-slider').value = params.sample_time;
             })
             .catch(error => {
                 console.error('Error:', error);

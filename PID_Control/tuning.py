@@ -69,16 +69,19 @@ class PIDTuner:
         Returns:
             Updated configuration dictionary
         """
+        # Add MOTOR_DEADBAND and MAX_MOTOR_SPEED to the list of parameters that can be tuned
+        all_params = params_list + ['MOTOR_DEADBAND', 'MAX_MOTOR_SPEED']
+        
         print("\n⚙️ Quick PID Tuning Mode")
         print("Current Parameters:")
-        for key in params_list:
+        for key in all_params:
             if key in self.config:
                 print(f"{key}: {self.config[key]}")
         
         print("\nEnter new value or press Enter to keep current value.")
         
-        # Update selected parameters
-        for key in params_list:
+        # Update parameters
+        for key in all_params:
             if key in self.config:
                 try:
                     new_value = input(f"{key} [{self.config[key]}]: ")
@@ -91,15 +94,8 @@ class PIDTuner:
                 except ValueError:
                     print(f"Invalid input for {key}, keeping current value.")
         
-        print("\nUpdated Parameters:")
-        for key in params_list:
-            if key in self.config:
-                print(f"{key}: {self.config[key]}")
-        
-        # Save changes to config file
+        # Save changes
         self.save_changes()
-        
-        input("\nPress Enter to continue...")
         
         return self.config
         

@@ -71,20 +71,32 @@ def update_pid_params(params_dict):
 
 def set_update_callback(callback):
     """
-    Legacy function for backward compatibility - parameters are now saved to file automatically
+    Set a callback function to be called when parameters are updated via the web interface.
     
-    In the new implementation, this function is kept for API compatibility but doesn't
-    directly use the callback. Parameter changes are persisted via JSON file.
+    The callback will be called with a dictionary of updated parameters.
     
     Args:
-        callback: Function to be called when parameters are updated (ignored in new implementation)
+        callback: Function to be called when parameters are updated
     """
-    # This function is kept for compatibility
-    if callable(callback):
-        # Store the callback in case we want to use it later
-        global _update_callback
-        _update_callback = callback
-        logger.info("Parameter update callback registered (note: direct callbacks not used in new implementation)")
+    # Store the callback for use when parameters are updated
+    global _update_callback
+    _update_callback = callback
+    logger.info("Parameter update callback registered")
+
+# Add a function to trigger the callback when parameters are updated
+def trigger_update_callback(params):
+    """
+    Trigger the update callback with the provided parameters.
+    
+    Args:
+        params: Dictionary of parameters to pass to the callback
+    """
+    if _update_callback and callable(_update_callback):
+        try:
+            _update_callback(params)
+            logger.info("Parameter update callback triggered")
+        except Exception as e:
+            logger.error(f"Error in parameter update callback: {e}")
 
 def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pid_output=0, motor_output=None):
     """
@@ -128,6 +140,7 @@ __all__ = [
     'set_pid_params',
     'update_pid_params',
     'set_update_callback',
+    'trigger_update_callback',
     'is_server_running',
     'PID_PARAMS'
 ] 
