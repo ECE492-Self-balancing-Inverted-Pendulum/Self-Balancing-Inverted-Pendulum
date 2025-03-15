@@ -36,8 +36,14 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     # Start the web server - the web_server module will print the URL
     try:
         start_server(port=server_port)
+        print("\n✅ Web dashboard started!")
+        print("ℹ️  If you can't connect, try:")
+        print("   - Using http://localhost:8080 from this device")
+        print("   - Check your network settings if connecting from another device")
+        print("   - Connect to the same WiFi network as the robot")
     except Exception as e:
-        print(f"❌ Error starting server. Try a different port (current: {server_port}).")
+        print(f"❌ Error starting server: {e}")
+        print(f"Try a different port (current: {server_port}).")
         return
     
     # Initialize the web interface with current PID parameters
@@ -92,13 +98,20 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         # Use a static variable to track the last output time
         if not hasattr(debug_callback, 'last_output_time'):
             debug_callback.last_output_time = 0
+            
+            # Create an initial output line
+            sys.stdout.write("\r" + " " * 80)
+            sys.stdout.write("\rAngle: {:6.2f}° | Output: {:6.1f} | Motor: {:3.0f}% | P: {:6.1f} | I: {:6.1f} | D: {:6.1f}".format(
+                roll, output, motor_output, pid_info['p_term'], pid_info['i_term'], pid_info['d_term']))
+            sys.stdout.flush()
         
         current_time = time.time()
-        # Limit terminal updates to once every 0.5 seconds to prevent clutter
-        if balance_controller.enable_debug and (current_time - debug_callback.last_output_time > 0.5):
+        # Update the same line with new values (don't create new lines)
+        if balance_controller.enable_debug and (current_time - debug_callback.last_output_time > 0.2):
             # Clear the line completely before writing
             sys.stdout.write("\r" + " " * 80)  # Write 80 spaces to clear the line
-            sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | Motor: {motor_output:3.0f}% | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
+            sys.stdout.write("\rAngle: {:6.2f}° | Output: {:6.1f} | Motor: {:3.0f}% | P: {:6.1f} | I: {:6.1f} | D: {:6.1f}".format(
+                roll, output, motor_output, pid_info['p_term'], pid_info['i_term'], pid_info['d_term']))
             sys.stdout.flush()
             debug_callback.last_output_time = current_time
         

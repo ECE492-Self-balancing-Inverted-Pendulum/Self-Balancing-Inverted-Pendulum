@@ -508,7 +508,7 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
         SERVER_STARTED = True
         if not debug:
             SERVER_INSTANCE = threading.Thread(
-                target=lambda: app.run(host=host, port=port, debug=debug, use_reloader=False),
+                target=lambda: app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=False),
                 daemon=True
             )
             SERVER_INSTANCE.start()
@@ -522,7 +522,7 @@ def start_server(host='0.0.0.0', port=5000, debug=False):
         else:
             # For debug mode, run in main thread
             logger.info(f"Starting server in debug mode on http://{host}:{port}/")
-            app.run(host=host, port=port, debug=debug, use_reloader=False)
+            app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=False)
     except Exception as e:
         SERVER_STARTED = False
         logger.error(f"Error starting server: {e}")

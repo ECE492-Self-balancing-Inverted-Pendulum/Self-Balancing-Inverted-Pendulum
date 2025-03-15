@@ -46,45 +46,25 @@ class BalanceController:
         
     def apply_motor_control(self, output):
         """
-        Convert PID output to motor commands.
+        Apply the control output to the motors.
         
         Args:
-            output: PID controller output (-100 to 100)
-            
-        Returns:
-            Tuple of (output, speed, direction)
+            output (float): PID controller output (-100 to 100)
         """
-        # Determine direction based on sign of output - INVERTED to counter tilt
-        # A negative output (robot tilting forward) should move motors backward (counterclockwise)
-        # A positive output (robot tilting backward) should move motors forward (clockwise)
-        if output > 0:
-            direction = "counterclockwise"  # Inverted from previous behavior
-        else:
-            direction = "clockwise"  # Inverted from previous behavior
+        output = max(-100, min(100, output))  # Clamp between -100 and 100
         
-        # Take absolute value for speed
+        # Determine the direction
+        if output > 0:
+            direction = "clockwise"
+        else:
+            direction = "counterclockwise"
+        
+        # Set the motor speed (absolute value of output)
         speed = abs(output)
         
-        # Apply motor deadband
-        if speed < self.config['MOTOR_DEADBAND']:
-            speed = 0
-            direction = "stop"
-        
-        # Apply boost when changing direction to overcome inertia
-        if self.last_direction != direction and direction != "stop":
-            # Add a boost when changing direction to overcome inertia
-            boost_percent = self.config['DIRECTION_CHANGE_BOOST']
-            speed = min(100, speed * (1 + boost_percent / 100.0))
-        
-        # Save current direction for next iteration
-        if direction != "stop":
-            self.last_direction = direction
-        
-        # Set motor speed based on whether we're using dual motors or single
-        if self.using_dual_motors:
-            self.motor.set_motors_speed(speed, direction)
-        else:
-            self.motor.set_motor_speed(speed, direction)
+        # Apply to motors using the motor driver
+        self.motor.set_speed(speed)
+        self.motor.set_direction(direction)
         
         return output, speed, direction
     
