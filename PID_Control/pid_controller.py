@@ -1,3 +1,40 @@
+"""
+PID Controller Module for Self-Balancing Robot
+
+This module implements a specialized PID controller optimized for self-balancing robots.
+It handles proportional, integral, and derivative control with several enhancements:
+- Uses angular velocity directly from IMU for cleaner derivative control
+- Implements integral windup prevention
+- Reduces integral term when error changes sign to minimize overshoot
+- Increases D term influence for high angular velocities for better stabilization
+
+The PID controller is the core algorithm that determines how much power to apply
+to the motors based on the robot's current angle, accumulated error, and rate of change.
+
+Example Usage:
+    # Initialize the controller with configuration
+    config = {
+        'P_GAIN': 5.0,         # How strongly to react to current tilt
+        'I_GAIN': 0.1,         # How strongly to react to accumulated tilt over time
+        'D_GAIN': 1.0,         # How strongly to react to rate of change of tilt
+        'SETPOINT': 0.0,       # Target angle (0 = upright)
+        'MAX_I_TERM': 20       # Limit to prevent integral windup
+    }
+    
+    pid = PIDController(config)
+    
+    # In the main control loop:
+    current_angle = imu.get_roll()
+    angular_velocity = imu.get_angular_velocity()
+    dt = 0.01  # Time since last update in seconds
+    
+    # Compute motor control output (-100 to 100)
+    output = pid.compute(current_angle, angular_velocity, dt)
+    
+    # Apply output to motors
+    motors.set_speed(abs(output), "clockwise" if output > 0 else "counterclockwise")
+"""
+
 import time
 
 class PIDController:

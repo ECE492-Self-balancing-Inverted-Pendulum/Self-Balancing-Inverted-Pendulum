@@ -1,3 +1,59 @@
+"""
+Motor Controller Module for Self-Balancing Robot
+
+This module provides classes for controlling DC motors through a motor driver
+using PWM (Pulse Width Modulation). It supports both single and dual motor
+configurations, making it suitable for various robot designs.
+
+Key features:
+- Single motor control with direction and speed adjustment
+- Dual motor control with synchronized movement
+- Individual control of dual motors for differential drive
+- PWM-based speed control for smooth operation
+- Proper GPIO cleanup to prevent pin conflicts
+
+The motor controller translates the output from the PID controller into the
+appropriate GPIO signals to control the motors, which physically balance the robot.
+It handles details like motor direction, speed scaling, and motor driver interfacing.
+
+Example Usage:
+    # Single Motor Example
+    from motorController import MotorControl
+    
+    # Initialize a single motor controller
+    motor = MotorControl(in1=13, in2=19)
+    
+    # Run motor at 75% speed clockwise
+    motor.set_motor_speed(75, "clockwise")
+    
+    # Stop the motor
+    motor.stop_motor()
+    
+    # Clean up when done
+    motor.cleanup()
+    
+    # Dual Motor Example
+    from motorController import DualMotorControl
+    
+    # Initialize dual motors
+    motors = DualMotorControl(
+        motor_a_in1=12, motor_a_in2=18,
+        motor_b_in1=13, motor_b_in2=19
+    )
+    
+    # Run both motors forward
+    motors.set_motors_speed(80, "clockwise")
+    
+    # Different directions (for turning)
+    motors.set_individual_speeds(50, "clockwise", 50, "counterclockwise")
+    
+    # Stop both motors
+    motors.stop_motors()
+    
+    # Clean up
+    motors.cleanup()
+"""
+
 import RPi.GPIO as GPIO
 import time
 
@@ -138,6 +194,88 @@ class DualMotorControl:
         self.motor_b.pwm2.stop()
         GPIO.cleanup()
         print("[INFO] Dual motor controller cleaned up.")
+        
+    def dual_motor_test(self):
+        """
+        Test mode for independently testing both motors.
+        
+        Example:
+            motors = DualMotorControl(
+                motor_a_in1=12, motor_a_in2=18,
+                motor_b_in1=13, motor_b_in2=19
+            )
+            motors.dual_motor_test()
+        """
+        from IMU_reader import IMUReader  # Import here to avoid circular imports
+        
+        print("\n🔌 Dual Motor Test Mode")
+        print("----------------------")
+        print("W: Both Motors Forward (100%)")
+        print("S: Both Motors Reverse (100%)")
+        print("A: Motor A Forward (100%)")
+        print("D: Motor B Forward (100%)")
+        print("Z: Motor A Reverse (100%)")
+        print("X: Motor B Reverse (100%)")
+        print("I: Get IMU Data")
+        print("Q: Quit to Main Menu")
+        print("-------------------------")
+        
+        try:
+            while True:
+                command = input("Enter Command: ").lower().strip()
+                
+                if command == "w":
+                    self.set_motors_speed(100, "clockwise")
+                    print("Both motors running FORWARD at 100%")
+                    
+                elif command == "s":
+                    self.set_motors_speed(100, "counterclockwise")
+                    print("Both motors running REVERSE at 100%")
+                    
+                elif command == "a":
+                    self.set_individual_speeds(100, "clockwise", 0, "stop")
+                    print("Motor A running FORWARD at 100%")
+                    
+                elif command == "d":
+                    self.set_individual_speeds(0, "stop", 100, "clockwise")
+                    print("Motor B running FORWARD at 100%")
+                    
+                elif command == "z":
+                    self.set_individual_speeds(100, "counterclockwise", 0, "stop")
+                    print("Motor A running REVERSE at 100%")
+                    
+                elif command == "x":
+                    self.set_individual_speeds(0, "stop", 100, "counterclockwise")
+                    print("Motor B running REVERSE at 100%")
+                    
+                elif command == "i":
+                    # Use global IMU if available
+                    try:
+                        if 'IMU' in globals():
+                            imu_data = IMU.get_imu_data()
+                        else:
+                            # Get the first available IMU instance
+                            import sys
+                            for name, obj in list(sys.modules.items()):
+                                if hasattr(obj, 'IMUReader'):
+                                    try:
+                                        imu = obj.IMUReader()
+                                        imu_data = imu.get_imu_data()
+                                        break
+                                    except:
+                                        pass
+                        print(f"Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                    except Exception as e:
+                        print(f"Error getting IMU data: {e}")
+                    
+                elif command == "q":
+                    print("Exiting dual motor test mode...")
+                    self.stop_motors()
+                    break
+                    
+        except KeyboardInterrupt:
+            print("\nTest interrupted.")
+            self.stop_motors()
 
 
 # Example usage

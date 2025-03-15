@@ -1,3 +1,42 @@
+"""
+PID Tuning Module for Self-Balancing Robot
+
+This module provides interfaces for interactively tuning the PID parameters
+and other configuration settings of the self-balancing robot. It offers multiple
+tuning modes from comprehensive parameter adjustment to quick adjustments of
+critical parameters.
+
+Key features:
+- Interactive console-based parameter tuning
+- Selective tuning of specific parameter groups
+- Runtime parameter adjustments during balancing
+- Automatic saving of tuned parameters to configuration file
+- Display of current parameter values for reference
+
+Tuning is a critical part of making a self-balancing robot work effectively,
+as the ideal PID parameters vary depending on the physical characteristics of
+the robot, such as weight distribution, motor power, and sensor placement.
+
+Example Usage:
+    # Full parameter tuning
+    from tuning import PIDTuner
+    from config import CONFIG
+    
+    tuner = PIDTuner(CONFIG)
+    
+    # Interactive tuning of all parameters
+    tuner.tune_parameters()
+    
+    # Quick tuning of just the core PID gains
+    tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN'])
+    
+    # Display current parameter values
+    tuner.list_current_parameters()
+    
+    # Runtime adjustment of a single parameter
+    tuner.tune_parameter_runtime('P_GAIN', 5.5)
+"""
+
 import sys
 import config
 

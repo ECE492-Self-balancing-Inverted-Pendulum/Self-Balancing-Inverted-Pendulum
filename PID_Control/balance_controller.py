@@ -1,3 +1,45 @@
+"""
+Balance Controller Module for Self-Balancing Robot
+
+This module implements the main balance control logic for the self-balancing robot,
+connecting the IMU sensors, PID controller, and motor control components together.
+
+Key features:
+- Integrates data from IMU with PID control to determine motor output
+- Handles motor control including deadband and maximum speed limits
+- Implements safety features to prevent damage during excessive tilt
+- Provides real-time debug output of critical balancing parameters
+- Supports both single and dual motor configurations
+
+The balance controller is the central component that ties together all the robot's
+systems to achieve and maintain balance. It continuously reads sensor data, calculates
+the appropriate response using PID control, and applies that control to the motors.
+
+Example Usage:
+    # Initialize components
+    from IMU_reader import IMUReader
+    from motorController import DualMotorControl
+    from config import CONFIG, HARDWARE_CONFIG
+    
+    # Create required components
+    imu = IMUReader(alpha=CONFIG['IMU_FILTER_ALPHA'], upside_down=CONFIG['IMU_UPSIDE_DOWN'])
+    motors = DualMotorControl(
+        motor_a_in1=HARDWARE_CONFIG['MOTOR_A_IN1_PIN'],
+        motor_a_in2=HARDWARE_CONFIG['MOTOR_A_IN2_PIN'],
+        motor_b_in1=HARDWARE_CONFIG['MOTOR_B_IN1_PIN'],
+        motor_b_in2=HARDWARE_CONFIG['MOTOR_B_IN2_PIN']
+    )
+    
+    # Create balance controller
+    controller = BalanceController(imu, motors, CONFIG)
+    
+    # Start balancing
+    controller.start_balancing()
+    
+    # To stop balancing
+    controller.stop_balancing()
+"""
+
 import time
 import sys
 import select
@@ -43,6 +85,35 @@ class BalanceController:
             print("Balance controller configured with dual motors")
         else:
             print("Balance controller configured with single motor")
+    
+    def _apply_direction_change_boost(self, output):
+        """
+        Apply a boost when direction changes to overcome inertia.
+        
+        Args:
+            output (float): Original PID output
+            
+        Returns:
+            float: Modified output with boost if direction changed
+        """
+        # Determine current direction
+        current_direction = "stop" if abs(output) < 0.1 else ("clockwise" if output > 0 else "counterclockwise")
+        
+        # Skip boost if output is very small
+        if current_direction == "stop":
+            self.last_direction = None
+            return output
+            
+        # Apply boost on direction change if configured
+        boost_amount = self.config.get('DIRECTION_CHANGE_BOOST', 0)
+        if boost_amount > 0 and self.last_direction is not None and current_direction != self.last_direction:
+            # Direction has changed, apply boost
+            output = output * (1 + boost_amount)
+        
+        # Store current direction for next iteration
+        self.last_direction = current_direction
+        
+        return output
         
     def apply_motor_control(self, output):
         """
@@ -67,12 +138,16 @@ class BalanceController:
         # Set the motor speed (absolute value of output)
         speed = abs(output)
         
-        # Apply deadband - if speed is below deadband, set to 0
-        if speed < deadband:
+        # Apply deadband mapping logic
+        if speed < 0.1:  # Near-zero threshold
             speed = 0
+        elif deadband > 0:
+            # Map the speed from [0-100] to [deadband-max_speed]
+            # Formula: new_speed = (speed / 100) * (max_speed - deadband) + deadband
+            speed = (speed / 100.0) * (max_speed - deadband) + deadband
         
-        # Apply max speed limit
-        speed = min(speed, max_speed)
+        # Ensure speed is within limits
+        speed = min(max(0, speed), max_speed)
         
         # Apply to motors using the motor driver
         if self.using_dual_motors:
@@ -100,14 +175,12 @@ class BalanceController:
         # Set up non-blocking input detection
         self.running = True
         
-        # Save terminal settings
-        old_settings = termios.tcgetattr(sys.stdin)
-        
+        # Configure terminal for non-blocking input
         try:
-            # Set terminal to raw mode
-            tty.setraw(sys.stdin.fileno())
+            # Set up terminal for non-blocking input this will allow us to check for key presses without having to press enter
+            tty.setcbreak(sys.stdin.fileno())
             
-            # Set up select for non-blocking input
+            # Track timing for main control loop
             last_time = time.time()
             last_debug_time = time.time()
             
@@ -116,19 +189,17 @@ class BalanceController:
                 # Check for keypress
                 if select.select([sys.stdin], [], [], 0)[0]:
                     key = sys.stdin.read(1)
+                    
                     if key.lower() == 'q':
-                        # Restore terminal settings
-                        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                        print("\nExiting balance mode...")
+                        print("\nStopping self-balancing mode...")
                         break
                 
-                # Calculate time delta
+                # Calculate time since last loop
                 current_time = time.time()
-                dt = current_time - last_time
+                time_passed = current_time - last_time
                 
-                # Ensure minimum sample time
-                if dt < self.sample_time:
-                    time.sleep(0.001)  # Small sleep to prevent CPU hogging
+                # Ensure we're running at the correct sample rate
+                if time_passed < self.sample_time:
                     continue
                 
                 # Get IMU data
@@ -136,61 +207,46 @@ class BalanceController:
                 roll = imu_data['roll']
                 angular_velocity = imu_data['angular_velocity']
                 
-                # Safety check - stop motors if tilt exceeds safe limit
-                if abs(roll) > self.config['SAFE_TILT_LIMIT']:
-                    # Restore terminal settings before printing
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                    
-                    # Use a single line for the safety message
-                    sys.stdout.write("\r" + " " * 80)  # Clear the line
-                    sys.stdout.write("\r⚠️ Safety cutoff: Tilt exceeded limit! Motors stopped.")
-                    sys.stdout.flush()
-                    
-                    # Stop motors
-                    self.motor.stop_motors() if self.using_dual_motors else self.motor.stop_motor()
-                    time.sleep(1)  # Give time to read the message
-                    break
+                # Calculate PID output using compute() instead of calculate()
+                output = self.pid.compute(
+                    current_value=roll,
+                    angular_velocity=angular_velocity,
+                    dt=time_passed
+                )
                 
-                # Update PID controller
-                pid_update = self.pid.update(0.0 - roll, dt, angular_velocity)  # Pass angular velocity for better D term
+                # Apply direction change boost if configured
+                output = self._apply_direction_change_boost(output)
                 
-                # Apply motor control based on PID output
-                output, speed, direction = self.apply_motor_control(pid_update)
+                # Apply the output to the motor(s)
+                result = self.apply_motor_control(output)
+                output, motor_speed, direction = result
                 
-                # Update last time for next iteration
+                # Update for next iteration
                 last_time = current_time
                 
-                # Call debug callback if provided
-                if debug_callback and callable(debug_callback):
-                    # Prepare debug info
+                # Clear the current line and print the status
+                sys.stdout.write("\r\033[K")  # Clear line
+                sys.stdout.write(f"Roll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}")
+                sys.stdout.flush()
+                
+                # Optional debug callback for data visualization or logging
+                if debug_callback and current_time - last_debug_time >= 0.1:  # Limit debug to 10Hz
                     debug_info = {
                         'roll': roll,
                         'angular_velocity': angular_velocity,
                         'output': output,
-                        'motor_output': speed,  # Add motor output percentage
+                        'motor_output': motor_speed,
                         'pid': {
                             'p_term': self.pid.p_term,
                             'i_term': self.pid.i_term,
                             'd_term': self.pid.d_term
                         }
                     }
-                    
-                    # Call the debug callback with the info
                     debug_callback(debug_info)
-                    
-                # Print debug output directly to terminal if no callback and debug is enabled
-                elif self.enable_debug:
-                    # Limit debug output rate to avoid flooding terminal
-                    if current_time - last_debug_time > 0.1:  # Max 10 updates per second
-                        # Clear the line completely before writing
-                        sys.stdout.write('\r' + ' ' * 80)
-                        sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | P: {self.pid.p_term:6.1f} | I: {self.pid.i_term:6.1f} | D: {self.pid.d_term:6.1f}")
-                        sys.stdout.flush()
-                        last_debug_time = current_time
-        
+                    last_debug_time = current_time
+                
         except Exception as e:
-            # Restore terminal settings before printing error
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            # Print error
             sys.stdout.write("\r" + " " * 80)  # Clear the line
             sys.stdout.write(f"\rError in balancing loop: {e}")
             sys.stdout.flush()
@@ -198,16 +254,11 @@ class BalanceController:
         
         finally:
             # Restore terminal settings
-            if old_settings:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            tty.setcbreak(sys.stdin.fileno())
             
-            # Stop motors for safety
-            if self.using_dual_motors:
-                self.motor.stop_motors()
-            else:
-                self.motor.stop_motor()
-            
-            self.running = False
+            # Make sure motors are stopped
+            self.motor.stop_motors() if self.using_dual_motors else self.motor.stop_motor()
+            print("\nSelf-balancing mode stopped.")
     
     def stop_balancing(self):
         """Stop the balancing control loop."""
@@ -216,4 +267,32 @@ class BalanceController:
             self.motor.stop_motors()
         else:
             self.motor.stop_motor()
-        print("Motor stopped. Balance mode exited.") 
+        print("Motor stopped. Balance mode exited.")
+
+    def update_from_config(self, config=None):
+        """
+        Update controller parameters from config file.
+        
+        Args:
+            config: Optional config dict. If None, reloads from file.
+        """
+        from config import CONFIG, load_config
+        
+        # If no config provided, reload from file
+        if config is None:
+            load_config()
+            config = CONFIG
+        
+        # Update PID parameters
+        self.pid.kp = config.get('P_GAIN', self.pid.kp)
+        self.pid.ki = config.get('I_GAIN', self.pid.ki)
+        self.pid.kd = config.get('D_GAIN', self.pid.kd)
+        
+        # Update other controller settings
+        self.sample_time = config.get('SAMPLE_TIME', self.sample_time)
+        
+        # Update IMU if we have access to it
+        if hasattr(self, 'imu') and self.imu:
+            self.imu.ALPHA = config.get('IMU_FILTER_ALPHA', self.imu.ALPHA)
+        
+        return True 

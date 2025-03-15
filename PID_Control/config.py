@@ -1,8 +1,43 @@
+"""
+Configuration Module for Self-Balancing Robot
+
+This module handles loading, saving, and providing default configuration parameters
+for the self-balancing robot. It centralizes all tunable parameters in one place,
+making it easy to adjust the robot's behavior without modifying code.
+
+Key features:
+- Loads configuration from JSON file or creates default if none exists
+- Provides easy-to-use interface for updating and saving configuration
+- Defines default parameters for PID controller, motors, and IMU
+- Maintains backward compatibility with older code
+
+The configuration parameters are divided into several categories:
+1. PID Controller Parameters - Control the balancing algorithm
+2. Motor Parameters - Define motor behavior and limitations
+3. IMU Parameters - Configure sensor responsiveness and orientation
+4. System Parameters - Define timing and safety limits
+
+Example Usage:
+    # Load the configuration (automatically done when importing)
+    from config import CONFIG, HARDWARE_CONFIG
+    
+    # Access configuration parameters
+    p_gain = CONFIG['P_GAIN']
+    motor_deadband = CONFIG['MOTOR_DEADBAND']
+    
+    # Update configuration parameters
+    CONFIG['P_GAIN'] = 5.5
+    
+    # Save updated configuration to file
+    from config import save_config
+    save_config(CONFIG)
+"""
+
 import json
 import os
 
 # File path for the configuration
-CONFIG_FILE = 'robot_config.json'
+CONFIG_FILE = 'config/robot_config.json'
 
 # Default configuration for the self-balancing robot
 DEFAULT_CONFIG = {
@@ -73,10 +108,7 @@ HARDWARE_CONFIG = {
     'MOTOR_A_IN2_PIN': 18,
     'MOTOR_B_IN1_PIN': 13,
     'MOTOR_B_IN2_PIN': 19,
-    
-    # For backward compatibility (older code expects these keys)
-    'IN1_PIN': 13,
-    'IN2_PIN': 19
+ 
 }
 
 # For backward compatibility
