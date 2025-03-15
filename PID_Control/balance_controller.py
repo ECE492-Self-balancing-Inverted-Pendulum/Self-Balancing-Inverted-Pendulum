@@ -63,8 +63,10 @@ class BalanceController:
         speed = abs(output)
         
         # Apply to motors using the motor driver
-        self.motor.set_speed(speed)
-        self.motor.set_direction(direction)
+        if self.using_dual_motors:
+            self.motor.set_motors_speed(speed, direction)
+        else:
+            self.motor.set_motor_speed(speed, direction)
         
         return output, speed, direction
     
