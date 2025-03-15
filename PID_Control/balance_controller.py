@@ -132,7 +132,9 @@ class BalanceController:
                     continue
                 
                 # Get IMU data
-                roll, angular_velocity = self.imu.get_angle_and_rate()
+                imu_data = self.imu.get_imu_data()
+                roll = imu_data['roll']
+                angular_velocity = imu_data['angular_velocity']
                 
                 # Safety check - stop motors if tilt exceeds safe limit
                 if abs(roll) > self.config['SAFE_TILT_LIMIT']:
