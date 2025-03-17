@@ -132,6 +132,7 @@ class BalanceController:
         # Determine the direction
         if output > 0:
             direction = "clockwise"
+        else:
             direction = "counterclockwise"
         
         # Set the motor speed (absolute value of output)
@@ -143,7 +144,7 @@ class BalanceController:
         elif deadband > 0:
             # Map the speed from [0-100] to [deadband-max_speed]
             # Formula: new_speed = (speed / 100) * (max_speed - deadband) + deadband
-            speed = (speed / 100) * (max_speed - deadband) + deadband
+            speed = (speed / 100.0) * (max_speed - deadband) + deadband
         
         # Ensure speed is within limits
         speed = min(max(0, speed), max_speed)
