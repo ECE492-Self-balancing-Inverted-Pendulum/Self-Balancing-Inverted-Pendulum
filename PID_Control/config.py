@@ -37,7 +37,7 @@ import json
 import os
 
 # File path for the configuration
-CONFIG_FILE = 'config/robot_config.json'
+CONFIG_FILE = 'robot_config.json'
 
 # Default configuration for the self-balancing robot
 DEFAULT_CONFIG = {

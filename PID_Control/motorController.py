@@ -56,6 +56,7 @@ Example Usage:
 
 import RPi.GPIO as GPIO
 import time
+import sys
 
 class MotorControl:
     """
@@ -206,8 +207,6 @@ class DualMotorControl:
             )
             motors.dual_motor_test()
         """
-        from IMU_reader import IMUReader  # Import here to avoid circular imports
-        
         print("\n🔌 Dual Motor Test Mode")
         print("----------------------")
         print("W: Both Motors Forward (100%)")
@@ -220,9 +219,39 @@ class DualMotorControl:
         print("Q: Quit to Main Menu")
         print("-------------------------")
         
+        # Initialize IMU instance once to avoid recreating it
+        imu_instance = None
+        try:
+            # First, try to import from main
+            try:
+                from main import IMU
+                if IMU is not None:
+                    imu_instance = IMU
+            except (ImportError, AttributeError):
+                pass
+                
+            # If not found, create a new one
+            if imu_instance is None:
+                try:
+                    from IMU_reader import IMUReader
+                    imu_instance = IMUReader()
+                except Exception as e:
+                    print(f"Warning: IMU not available - {e}")
+        except Exception as e:
+            print(f"Warning: IMU initialization failed - {e}")
+        
         try:
             while True:
-                command = input("Enter Command: ").lower().strip()
+                # Use sys.stdout.write to ensure the prompt appears on a clean line
+                sys.stdout.write("\rEnter Command: ")
+                sys.stdout.flush()
+                
+                # Use a single character read to get immediate response
+                command = input().lower().strip()
+                
+                # Skip empty commands
+                if not command:
+                    continue
                 
                 if command == "w":
                     self.set_motors_speed(100, "clockwise")
@@ -249,32 +278,29 @@ class DualMotorControl:
                     print("Motor B running REVERSE at 100%")
                     
                 elif command == "i":
-                    # Use global IMU if available
-                    try:
-                        if 'IMU' in globals():
-                            imu_data = IMU.get_imu_data()
-                        else:
-                            # Get the first available IMU instance
-                            import sys
-                            for name, obj in list(sys.modules.items()):
-                                if hasattr(obj, 'IMUReader'):
-                                    try:
-                                        imu = obj.IMUReader()
-                                        imu_data = imu.get_imu_data()
-                                        break
-                                    except:
-                                        pass
-                        print(f"Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
-                    except Exception as e:
-                        print(f"Error getting IMU data: {e}")
+                    # Use the already initialized IMU instance
+                    if imu_instance:
+                        try:
+                            imu_data = imu_instance.get_imu_data()
+                            print(f"Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                        except Exception as e:
+                            print(f"Error getting IMU data: {e}")
+                    else:
+                        print("IMU not available")
                     
                 elif command == "q":
                     print("Exiting dual motor test mode...")
                     self.stop_motors()
                     break
                     
+                else:
+                    print(f"Unknown command: '{command}'")
+                
         except KeyboardInterrupt:
             print("\nTest interrupted.")
+            self.stop_motors()
+        finally:
+            # Make sure motors are stopped when exiting
             self.stop_motors()
 
 
