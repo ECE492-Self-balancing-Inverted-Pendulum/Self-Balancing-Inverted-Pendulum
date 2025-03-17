@@ -1,0 +1,11 @@
+{
+    "kp": 19.2,
+    "ki": 0.1,
+    "kd": 1.0,
+    "alpha": 0.2,
+    "sample_time": 10.0,
+    "target_angle": 0.0,
+    "deadband": 60.0,
+    "max_speed": 100.0,
+    "zero_threshold": 0.1
+}

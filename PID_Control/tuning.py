@@ -68,29 +68,55 @@ class PIDTuner:
         Returns:
             Updated configuration dictionary
         """
-        print("\n⚙️ PID Tuning Mode")
+        print("\nPID Tuning Mode")
         print("Current PID Parameters:")
+        print("-" * 40)
+        
+        # Display parameters in a more organized way
         for key, value in self.config.items():
-            print(f"{key}: {value}")
+            print(f"{key:20}: {value}")
+        
+        print("-" * 40)
         print("\nEnter new value or press Enter to keep current value.")
+        print("Parameters will appear one by one.\n")
         
         # Update parameters
         for key in self.config:
             try:
-                new_value = input(f"{key} [{self.config[key]}]: ")
+                # Print on a new line each time
+                print(f"\n{key} [{self.config[key]}]")
+                new_value = input("New value: ")
+                
                 if new_value.strip():
                     # Convert to the same type as the current value
                     if isinstance(self.config[key], float):
                         self.config[key] = float(new_value)
+                        print(f"Updated to: {self.config[key]}")
                     elif isinstance(self.config[key], int):
                         self.config[key] = int(new_value)
-            except ValueError:
-                print(f"Invalid input for {key}, keeping current value.")
+                        print(f"Updated to: {self.config[key]}")
+                    elif isinstance(self.config[key], bool):
+                        # Handle boolean values
+                        if new_value.lower() in ('true', 'yes', '1'):
+                            self.config[key] = True
+                        else:
+                            self.config[key] = False
+                        print(f"Updated to: {self.config[key]}")
+                    else:
+                        # Handle strings and other types
+                        self.config[key] = new_value
+                        print(f"Updated to: {self.config[key]}")
+                else:
+                    print("Kept current value.")
+            except ValueError as e:
+                print(f"Invalid input for {key}, keeping current value. Error: {e}")
         
         print("\nUpdated PID Parameters:")
+        print("-" * 40)
         for key, value in self.config.items():
-            print(f"{key}: {value}")
-            
+            print(f"{key:20}: {value}")
+        print("-" * 40)
+        
         # Save changes to config file
         self.save_changes()
         
@@ -111,7 +137,7 @@ class PIDTuner:
         # Add MOTOR_DEADBAND and MAX_MOTOR_SPEED to the list of parameters that can be tuned
         all_params = params_list + ['MOTOR_DEADBAND', 'MAX_MOTOR_SPEED']
         
-        print("\n⚙️ Quick PID Tuning Mode")
+        print("\nQuick PID Tuning Mode")
         print("Current Parameters:")
         for key in all_params:
             if key in self.config:

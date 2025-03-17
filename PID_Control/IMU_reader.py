@@ -32,13 +32,57 @@ Example Usage:
 """
 
 import time
-import board
-import adafruit_icm20x
 import math
 import sys
 import select
 import tty
 import termios
+
+try:
+    import board
+    import adafruit_icm20x
+    HARDWARE_AVAILABLE = True
+except ImportError:
+    print("Warning: Running with mock IMU - board/adafruit_icm20x modules not available")
+    HARDWARE_AVAILABLE = False
+    
+    # Mock classes for testing without hardware
+    class MockICM20948:
+        def __init__(self, i2c):
+            self._angle = 0.0
+            self._angular_vel = 0.0
+            self._last_update = time.time()
+        
+        @property
+        def acceleration(self):
+            # Simulate acceleration readings
+            # Returns (x, y, z) tuple
+            t = time.time()
+            # Simulate some gentle motion
+            self._angle += 0.1 * math.sin(t)
+            return (0.0, -9.81 * math.sin(self._angle), 9.81 * math.cos(self._angle))
+        
+        @property
+        def gyro(self):
+            # Simulate gyroscope readings
+            # Returns (x, y, z) tuple in degrees/second
+            t = time.time()
+            self._angular_vel = 5.0 * math.cos(t)
+            return (self._angular_vel, 0.0, 0.0)
+    
+    class MockI2C:
+        def __init__(self):
+            pass
+    
+    # Mock the board module
+    class MockBoard:
+        @property
+        def I2C(self):
+            return MockI2C
+
+    # Create mock instances
+    board = MockBoard()
+    adafruit_icm20x = type('MockAdafruitICM20X', (), {'ICM20948': MockICM20948})
 
 class IMUReader:
     """
@@ -197,7 +241,7 @@ class IMUReader:
                 print("Warning: config module not found, settings will not be saved.")
                 pass
         
-        print("\n📊 IMU Tuning Mode")
+        print("\nIMU Tuning Mode")
         print("------------------")
         print("This mode allows you to adjust the IMU filter settings")
         print("to find the right balance between responsiveness and stability.")
@@ -211,7 +255,7 @@ class IMUReader:
         print("t : Toggle IMU upside-down setting")
         print("d : Display current values")
         print("q : Exit IMU tuning mode")
-        print("\nContinuously displays IMU data. Press any key to access commands.")
+        print("\nIMU data will be displayed periodically. Press a key to access commands.")
         
         # Save original terminal settings
         old_settings = termios.tcgetattr(sys.stdin)
@@ -220,31 +264,29 @@ class IMUReader:
             # Set terminal to cbreak mode (better than raw mode)
             tty.setcbreak(sys.stdin.fileno())
             
+            last_print_time = time.time()
+            
             while True:
-                # Display IMU data
-                imu_data = self.get_imu_data()
-                
-                # Clear line and print data - make sure it's padded to clear the whole line
-                padding = " " * 30  # Extra padding to overwrite long lines
-                sys.stdout.write(f"\r\033[K")  # \r moves cursor to start, \033[K clears to end of line
-                sys.stdout.write(f"Roll: {imu_data['roll']:.2f}° | Angular Vel: {imu_data['angular_velocity']:.2f}°/s | Alpha: {self.ALPHA:.2f} | Upside-down: {self.MOUNTED_UPSIDE_DOWN}{padding}")
-                sys.stdout.flush()
+                # Display IMU data every 0.5 seconds instead of continuously
+                current_time = time.time()
+                if current_time - last_print_time >= 0.5:
+                    # Display IMU data
+                    imu_data = self.get_imu_data()
+                    print(f"Roll: {imu_data['roll']:.2f}° | Angular Vel: {imu_data['angular_velocity']:.2f}°/s | Alpha: {self.ALPHA:.2f} | Upside-down: {self.MOUNTED_UPSIDE_DOWN}")
+                    last_print_time = current_time
                 
                 # Check if key pressed with a short timeout
                 if select.select([sys.stdin], [], [], 0.1)[0]:
                     key = sys.stdin.read(1)
                     
-                    # Handle each keypress and print new lines with proper clearing
+                    # Handle each keypress
                     if key == 'q':
-                        # Clear the line before exiting
-                        sys.stdout.write("\r\033[K")
                         print("\nExiting IMU tuning mode.")
                         break
                     
                     elif key == '+':
                         new_alpha = min(self.ALPHA + 0.05, 0.95)
                         self.set_alpha(new_alpha)
-                        sys.stdout.write("\r\033[K")
                         print(f"\nIncreased alpha to {self.ALPHA:.2f}")
                         
                         # Update the config
@@ -254,7 +296,6 @@ class IMUReader:
                     elif key == '-':
                         new_alpha = max(self.ALPHA - 0.05, 0.05)
                         self.set_alpha(new_alpha)
-                        sys.stdout.write("\r\033[K")
                         print(f"\nDecreased alpha to {self.ALPHA:.2f}")
                         
                         # Update the config
@@ -263,7 +304,6 @@ class IMUReader:
                     
                     elif key == 'r':
                         self.set_alpha(self.DEFAULT_ALPHA)
-                        sys.stdout.write("\r\033[K")
                         print(f"\nReset alpha to default ({self.DEFAULT_ALPHA:.2f})")
                         
                         # Update the config
@@ -273,7 +313,6 @@ class IMUReader:
                     elif key == 't':
                         # Toggle the upside-down setting
                         self.MOUNTED_UPSIDE_DOWN = not self.MOUNTED_UPSIDE_DOWN
-                        sys.stdout.write("\r\033[K")
                         print(f"\nToggled IMU orientation. Upside-down: {self.MOUNTED_UPSIDE_DOWN}")
                         
                         # Update the config
@@ -281,15 +320,11 @@ class IMUReader:
                         save_config(CONFIG)
                     
                     elif key == 'd':
-                        sys.stdout.write("\r\033[K")
                         print(f"\nCurrent settings: Alpha: {self.ALPHA:.2f}, Upside-down: {self.MOUNTED_UPSIDE_DOWN}")
         
         finally:
             # Proper cleanup: restore terminal settings no matter what
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            
-            # Clear any partial line
-            sys.stdout.write("\r\033[K")
             print("\nIMU tuning mode exited.")
 
 # Example usage

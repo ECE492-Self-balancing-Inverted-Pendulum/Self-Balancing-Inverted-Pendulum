@@ -1,7 +1,7 @@
 {
-    "P_GAIN": 10.0,
+    "P_GAIN": 19.2,
     "I_GAIN": 0.1,
-    "D_GAIN": 1.0,
+    "D_GAIN": 1,
     "MAX_I_TERM": 20,
     "SETPOINT": 0.0,
     "MOTOR_DEADBAND": 60,
@@ -11,5 +11,6 @@
     "IN1_PIN": 13,
     "IN2_PIN": 19,
     "IMU_FILTER_ALPHA": 0.2,
-    "DIRECTION_CHANGE_BOOST": 10.0
+    "DIRECTION_CHANGE_BOOST": 10.0,
+    "ZERO_THRESHOLD": 0.1
 }

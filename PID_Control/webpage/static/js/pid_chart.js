@@ -99,7 +99,10 @@ function setupPIDSliders() {
         { slider: 'ki-slider', input: 'ki-input' },
         { slider: 'kd-slider', input: 'kd-input' },
         { slider: 'alpha-slider', input: 'alpha-input' },
-        { slider: 'sample-time-slider', input: 'sample-time-input' }
+        { slider: 'sample-time-slider', input: 'sample-time-input' },
+        { slider: 'deadband-slider', input: 'deadband-input' },
+        { slider: 'max-speed-slider', input: 'max-speed-input' },
+        { slider: 'zero-threshold-slider', input: 'zero-threshold-input' }
     ];
     
     sliderInputPairs.forEach(pair => {

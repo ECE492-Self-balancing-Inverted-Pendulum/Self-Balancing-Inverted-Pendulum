@@ -214,6 +214,19 @@
                                 </div>
                                 <input type="range" class="form-range" id="max-speed-slider" min="60" max="100" step="1" value="90">
                             </div>
+                            <div class="mb-3">
+                                <label for="zero-threshold-input" class="form-label">Zero Threshold</label>
+                                <div class="input-group mb-2">
+                                    <input type="number" class="form-control" id="zero-threshold-input" step="0.01" min="0.01" max="1.0">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="zero-threshold-input">-0.01</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="zero-threshold-input">+0.01</button>
+                                </div>
+                                <div class="slider-label">
+                                    <span>0.01 (Sensitive)</span>
+                                    <span>1.0 (Less responsive)</span>
+                                </div>
+                                <input type="range" class="form-range" id="zero-threshold-slider" min="0.01" max="1.0" step="0.01" value="0.1">
+                            </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Update Parameters</button>
                             </div>
@@ -317,6 +330,7 @@
                     document.getElementById('sample-time-input').value = data.sample_time;
                     document.getElementById('deadband-input').value = data.deadband || 10;
                     document.getElementById('max-speed-input').value = data.max_speed || 90;
+                    document.getElementById('zero-threshold-input').value = data.zero_threshold || 0.1;
                     
                     // Update sliders to match input values
                     document.getElementById('kp-slider').value = data.kp;
@@ -326,6 +340,7 @@
                     document.getElementById('sample-time-slider').value = data.sample_time;
                     document.getElementById('deadband-slider').value = data.deadband || 10;
                     document.getElementById('max-speed-slider').value = data.max_speed || 90;
+                    document.getElementById('zero-threshold-slider').value = data.zero_threshold || 0.1;
                 })
                 .catch(error => {
                     console.error('Error fetching PID parameters:', error);
@@ -350,13 +365,15 @@
                 alpha: parseFloat(document.getElementById('alpha-input').value),
                 sample_time: parseFloat(document.getElementById('sample-time-input').value),
                 deadband: parseFloat(document.getElementById('deadband-input').value),
-                max_speed: parseFloat(document.getElementById('max-speed-input').value)
+                max_speed: parseFloat(document.getElementById('max-speed-input').value),
+                zero_threshold: parseFloat(document.getElementById('zero-threshold-input').value)
             };
             
             // Validate values before sending
             if (isNaN(params.kp) || isNaN(params.ki) || isNaN(params.kd) || 
                 isNaN(params.alpha) || isNaN(params.sample_time) ||
-                isNaN(params.deadband) || isNaN(params.max_speed)) {
+                isNaN(params.deadband) || isNaN(params.max_speed) ||
+                isNaN(params.zero_threshold)) {
                 showError('Invalid parameter values. Please check your inputs.');
                 return;
             }

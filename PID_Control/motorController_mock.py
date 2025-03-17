@@ -1,69 +1,61 @@
 """
-Motor Controller Module for Self-Balancing Robot
+Motor Controller Module (Mock Version for Testing)
 
-This module provides classes for controlling DC motors through GPIO pins on a Raspberry Pi.
-It offers both single and dual motor control with common interfaces.
-
-Modified to work on non-Raspberry Pi systems with a mock GPIO implementation.
+This is a mock version of the motor controller module that doesn't rely on RPi.GPIO.
+It enables testing the web interface on non-Raspberry Pi devices.
 """
 
 import time
 import sys
 
-# Try to import RPi.GPIO module, or create a mock if not available
+# Mock GPIO module
+class GPIO:
+    OUT = 1
+    IN = 0
+    BCM = 1
+    BOARD = 0
+    
+    @staticmethod
+    def setmode(mode):
+        print(f"[MOCK] GPIO.setmode({mode})")
+    
+    @staticmethod
+    def setup(pin, mode):
+        print(f"[MOCK] GPIO.setup({pin}, {mode})")
+    
+    @staticmethod
+    def output(pin, value):
+        print(f"[MOCK] GPIO.output({pin}, {value})")
+    
+    @staticmethod
+    def cleanup():
+        print("[MOCK] GPIO.cleanup()")
+
+class PWM:
+    def __init__(self, pin, freq):
+        self.pin = pin
+        self.freq = freq
+        self.dc = 0
+        print(f"[MOCK] PWM initialized on pin {pin} with frequency {freq}Hz")
+    
+    def start(self, dc):
+        self.dc = dc
+        print(f"[MOCK] PWM started with duty cycle {dc}%")
+    
+    def ChangeDutyCycle(self, dc):
+        self.dc = dc
+        print(f"[MOCK] PWM duty cycle changed to {dc}%")
+    
+    def stop(self):
+        print(f"[MOCK] PWM stopped on pin {self.pin}")
+
+# Replace the GPIO import for testing
 try:
     import RPi.GPIO as GPIO
-    USING_REAL_GPIO = True
+    print("Using real GPIO")
 except ImportError:
-    # Create a mock GPIO module for testing on non-Raspberry Pi systems
-    print("RPi.GPIO not available, using mock implementation for testing")
-    USING_REAL_GPIO = False
-    
-    # Mock GPIO module
-    class MockGPIO:
-        OUT = 1
-        IN = 0
-        BCM = 1
-        BOARD = 0
-        
-        @staticmethod
-        def setmode(mode):
-            print(f"[MOCK] GPIO.setmode({mode})")
-        
-        @staticmethod
-        def setup(pin, mode):
-            print(f"[MOCK] GPIO.setup({pin}, {mode})")
-        
-        @staticmethod
-        def output(pin, value):
-            print(f"[MOCK] GPIO.output({pin}, {value})")
-        
-        @staticmethod
-        def cleanup():
-            print("[MOCK] GPIO.cleanup()")
-    
-    # Mock PWM class
-    class MockPWM:
-        def __init__(self, pin, freq):
-            self.pin = pin
-            self.freq = freq
-            self.dc = 0
-            print(f"[MOCK] PWM initialized on pin {pin} with frequency {freq}Hz")
-        
-        def start(self, dc):
-            self.dc = dc
-            print(f"[MOCK] PWM started with duty cycle {dc}%")
-        
-        def ChangeDutyCycle(self, dc):
-            self.dc = dc
-            print(f"[MOCK] PWM duty cycle changed to {dc}%")
-        
-        def stop(self):
-            print(f"[MOCK] PWM stopped on pin {self.pin}")
-    
-    # Set up mock GPIO
-    GPIO = MockGPIO
-    GPIO.PWM = MockPWM
+    print("Using mock GPIO")
+    GPIO = GPIO
 
 class MotorControl:
     """
@@ -88,8 +80,8 @@ class MotorControl:
         GPIO.setup(self.in2_pin, GPIO.OUT)
 
         # Set up PWM
-        self.pwm1 = GPIO.PWM(self.in1_pin, self.pwm_freq)
-        self.pwm2 = GPIO.PWM(self.in2_pin, self.pwm_freq)
+        self.pwm1 = PWM(self.in1_pin, self.pwm_freq)
+        self.pwm2 = PWM(self.in2_pin, self.pwm_freq)
         self.pwm1.start(0)
         self.pwm2.start(0)
 
@@ -186,42 +178,42 @@ class DualMotorControl:
 
     def dual_motor_test(self):
         """Test both motors with a simple sequence."""
-        print("\nDual Motor Test")
+        print("\n🔌 Dual Motor Test")
         print("Testing both motors. Press Ctrl+C to stop.")
 
         try:
             # Test sequence for both motors together
-            print("Testing both motors forward (clockwise)...")
+            print("\nTesting both motors forward (clockwise)...")
             self.set_motors_speed(70, "clockwise")
             time.sleep(2)
             
-            print("Stopping motors...")
+            print("\nStopping motors...")
             self.stop_motors()
             time.sleep(1)
             
-            print("Testing both motors backward (counterclockwise)...")
+            print("\nTesting both motors backward (counterclockwise)...")
             self.set_motors_speed(70, "counterclockwise")
             time.sleep(2)
             
-            print("Stopping motors...")
+            print("\nStopping motors...")
             self.stop_motors()
             time.sleep(1)
             
             # Individual motor tests
-            print("Testing motor A only...")
+            print("\nTesting motor A only...")
             self.set_individual_speeds(70, "clockwise", 0, "clockwise")
             time.sleep(2)
             
-            print("Testing motor B only...")
+            print("\nTesting motor B only...")
             self.set_individual_speeds(0, "clockwise", 70, "clockwise")
             time.sleep(2)
             
             # Differential drive test
-            print("Testing differential drive (spin in place)...")
+            print("\nTesting differential drive (spin in place)...")
             self.set_individual_speeds(70, "clockwise", 70, "counterclockwise")
             time.sleep(2)
             
-            print("Test complete, stopping motors.")
+            print("\nTest complete, stopping motors.")
             self.stop_motors()
             
         except KeyboardInterrupt:

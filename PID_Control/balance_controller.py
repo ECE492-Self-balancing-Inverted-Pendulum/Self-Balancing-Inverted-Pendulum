@@ -122,9 +122,10 @@ class BalanceController:
         Args:
             output (float): PID controller output (-100 to 100)
         """
-        # Get deadband and max speed from config
+        # Get parameters from config
         deadband = self.config.get('MOTOR_DEADBAND', 0)
         max_speed = self.config.get('MAX_MOTOR_SPEED', 100)
+        zero_threshold = self.config.get('ZERO_THRESHOLD', 0.1)  # Get threshold from config
         
         # Clamp output between -100 and 100
         output = max(-100, min(100, output))
@@ -139,7 +140,7 @@ class BalanceController:
         speed = abs(output)
         
         # Apply deadband mapping logic
-        if speed < 0.1:  # Near-zero threshold
+        if speed < zero_threshold:  # Use configurable threshold instead of hardcoded value
             speed = 0
         elif deadband > 0:
             # Map the speed from [0-100] to [deadband-max_speed]
@@ -164,9 +165,13 @@ class BalanceController:
         Args:
             debug_callback: Optional callback function for debug output
         """
-        print("\n🤖 Self-Balancing Mode Started!")
-        print("Press 'Q' to return to main menu")
-        print("-------------------------")
+        # Only print terminal output if not in web dashboard mode
+        is_web_mode = debug_callback is not None
+        
+        if not is_web_mode:
+            print("\nSelf-Balancing Mode Started!")
+            print("Press 'Q' to return to main menu")
+            print("-------------------------")
         
         # Reset PID controller
         self.pid.reset()
@@ -183,6 +188,7 @@ class BalanceController:
             # Track timing for main control loop
             last_time = time.time()
             last_debug_time = time.time()
+            last_print_time = time.time()  # For throttling terminal output
             
             # Main control loop
             while self.running:
@@ -191,7 +197,8 @@ class BalanceController:
                     key = sys.stdin.read(1)
                     
                     if key.lower() == 'q':
-                        print("\nStopping self-balancing mode...")
+                        if not is_web_mode:
+                            print("\nStopping self-balancing mode...")
                         break
                 
                 # Calculate time since last loop
@@ -224,10 +231,10 @@ class BalanceController:
                 # Update for next iteration
                 last_time = current_time
                 
-                # Clear the current line and print the status
-                sys.stdout.write("\r\033[K")  # Clear line
-                sys.stdout.write(f"Roll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}")
-                sys.stdout.flush()
+                # Print status to terminal only if not in web mode and at a sensible rate (every 0.5 sec)
+                if not is_web_mode and current_time - last_print_time >= 0.5:
+                    print(f"Roll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}")
+                    last_print_time = current_time
                 
                 # Optional debug callback for data visualization or logging
                 if debug_callback and current_time - last_debug_time >= 0.1:  # Limit debug to 10Hz
@@ -247,18 +254,12 @@ class BalanceController:
                 
         except Exception as e:
             # Print error
-            sys.stdout.write("\r" + " " * 80)  # Clear the line
-            sys.stdout.write(f"\rError in balancing loop: {e}")
-            sys.stdout.flush()
-            print()  # Add a newline after the error
-        
+            print(f"Error in balancing loop: {e}")
         finally:
-            # Restore terminal settings
-            tty.setcbreak(sys.stdin.fileno())
-            
             # Make sure motors are stopped
             self.motor.stop_motors() if self.using_dual_motors else self.motor.stop_motor()
-            print("\nSelf-balancing mode stopped.")
+            if not is_web_mode:
+                print("\nSelf-balancing mode stopped.")
     
     def stop_balancing(self):
         """Stop the balancing control loop."""

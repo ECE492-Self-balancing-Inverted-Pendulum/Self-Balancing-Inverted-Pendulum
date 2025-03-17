@@ -7,37 +7,80 @@ a PID controller in real-time.
 
 import logging
 import time
+import threading
 
 # Configure logging specifically for the compatibility layer
 logger = logging.getLogger('pid_web_compatibility')
 
-# Import from the web server implementation
-try:
-    from .web_server import (
-        start_server,
-        stop_server,
-        add_data_point as new_add_data_point,
-        is_server_running,
-        PID_PARAMS,
-        save_pid_params,
-        CONFIG
-    )
-except ImportError as e:
-    logger.error(f"Error importing from web_server: {e}")
-    # Define fallback dummy functions if imports fail
-    def start_server(*args, **kwargs): 
-        logger.error("Web server module not available")
-    def stop_server(): pass
-    def new_add_data_point(*args, **kwargs): pass
-    def is_server_running(): return False
-    PID_PARAMS = {'kp': 0.0, 'ki': 0.0, 'kd': 0.0, 'target_angle': 0.0}
-    def save_pid_params(): pass
-    CONFIG = {}
+# Define module-level variables that will be populated by the web server module
+PID_PARAMS = {'kp': 0.0, 'ki': 0.0, 'kd': 0.0, 'target_angle': 0.0, 'zero_threshold': 0.1}
+CONFIG = {}
+_update_callback = None
+_web_server_module = None
 
-# Backward compatibility functions with improved error handling
+# Functions that will be provided by the web server module
+def _import_web_server():
+    """Import the web server module on demand to avoid circular imports"""
+    global _web_server_module
+    if _web_server_module is None:
+        try:
+            from . import web_server as ws
+            _web_server_module = ws
+            # Update our module variables with the ones from web_server
+            global PID_PARAMS, CONFIG
+            PID_PARAMS.update(ws.PID_PARAMS)
+            CONFIG.update(ws.CONFIG)
+        except ImportError as e:
+            logger.error(f"Error importing web_server: {e}")
+            return None
+    return _web_server_module
+
+def start_server(host='0.0.0.0', port=8080, debug=False):
+    """
+    Start the web server on the specified host and port
+    
+    Args:
+        host: Host address to bind to
+        port: Port to listen on
+        debug: Whether to run in debug mode
+    """
+    ws = _import_web_server()
+    if ws is None:
+        logger.error("Web server module not available")
+        return
+    
+    return ws.start_server(host=host, port=port, debug=debug)
+
+def stop_server():
+    """Stop the web server"""
+    ws = _import_web_server()
+    if ws is None:
+        logger.error("Web server module not available")
+        return
+    
+    return ws.stop_server()
+
+def is_server_running():
+    """Check if the server is running"""
+    ws = _import_web_server()
+    if ws is None:
+        logger.error("Web server module not available")
+        return False
+    
+    return ws.is_server_running()
+
+def save_pid_params():
+    """Save PID parameters to file"""
+    ws = _import_web_server()
+    if ws is None:
+        logger.error("Web server module not available")
+        return
+    
+    return ws.save_pid_params()
+
 def set_pid_params(kp, ki, kd, target_angle):
     """
-    Legacy function for backward compatibility - sets PID parameters
+    Set PID parameters
     
     Args:
         kp: Proportional gain
@@ -46,26 +89,43 @@ def set_pid_params(kp, ki, kd, target_angle):
         target_angle: Target angle setpoint
     """
     try:
-        PID_PARAMS['kp'] = float(kp)
-        PID_PARAMS['ki'] = float(ki)
-        PID_PARAMS['kd'] = float(kd)
-        PID_PARAMS['target_angle'] = float(target_angle)
-        save_pid_params()
+        ws = _import_web_server()
+        if ws is None:
+            # Still update our local copy even if web_server is not available
+            PID_PARAMS['kp'] = float(kp)
+            PID_PARAMS['ki'] = float(ki)
+            PID_PARAMS['kd'] = float(kd)
+            PID_PARAMS['target_angle'] = float(target_angle)
+            return
+        
+        ws.PID_PARAMS['kp'] = float(kp)
+        ws.PID_PARAMS['ki'] = float(ki)
+        ws.PID_PARAMS['kd'] = float(kd)
+        ws.PID_PARAMS['target_angle'] = float(target_angle)
+        ws.save_pid_params()
     except Exception as e:
         logger.error(f"Error in set_pid_params: {e}")
 
 def update_pid_params(params_dict):
     """
-    Legacy function for backward compatibility - updates PID parameters from a dictionary
+    Update PID parameters from a dictionary
     
     Args:
         params_dict: Dictionary containing parameter key-value pairs
     """
     try:
+        ws = _import_web_server()
+        if ws is None:
+            # Still update our local copy even if web_server is not available
+            for key, value in params_dict.items():
+                if key in PID_PARAMS:
+                    PID_PARAMS[key] = float(value)
+            return
+        
         for key, value in params_dict.items():
-            if key in PID_PARAMS:
-                PID_PARAMS[key] = float(value)
-        save_pid_params()
+            if key in ws.PID_PARAMS:
+                ws.PID_PARAMS[key] = float(value)
+        ws.save_pid_params()
     except Exception as e:
         logger.error(f"Error in update_pid_params: {e}")
 
@@ -83,7 +143,6 @@ def set_update_callback(callback):
     _update_callback = callback
     logger.info("Parameter update callback registered")
 
-# Add a function to trigger the callback when parameters are updated
 def trigger_update_callback(params):
     """
     Trigger the update callback with the provided parameters.
@@ -100,7 +159,7 @@ def trigger_update_callback(params):
 
 def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pid_output=0, motor_output=None):
     """
-    Legacy function for backward compatibility - adds a data point with auto-generated timestamp
+    Add a data point with auto-generated timestamp
     
     Args:
         actual_angle: Measured angle from the IMU
@@ -113,10 +172,15 @@ def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pi
         motor_output: Motor output percentage (default: None, will use abs(pid_output) if not provided)
     """
     try:
+        ws = _import_web_server()
+        if ws is None:
+            logger.error("Web server module not available, cannot add data point")
+            return
+        
         timestamp = time.time()
         # Use motor_output if provided, otherwise default to abs(pid_output)
         motor_out = motor_output if motor_output is not None else abs(pid_output)
-        new_add_data_point(
+        ws.add_data_point(
             timestamp=timestamp,
             actual_angle=actual_angle,
             target_angle=target_angle,
@@ -129,9 +193,6 @@ def add_data_point(actual_angle, target_angle, error, p_term, i_term, d_term, pi
         )
     except Exception as e:
         logger.error(f"Error in add_data_point: {e}")
-
-# Store a reference to the update callback if provided
-_update_callback = None
 
 __all__ = [
     'start_server',

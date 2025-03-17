@@ -52,7 +52,7 @@ CONFIG = {
     'csv_logging': False,
     'time_window': 10,  # seconds
     'max_data_points': 1000,  # Maximum number of data points to store
-    'pid_config_file': 'pid_config.json'
+    'pid_config_file': 'robot_config.json'
 }
 PID_PARAMS = {
     'kp': 1.0,
@@ -62,7 +62,8 @@ PID_PARAMS = {
     'sample_time': 10,
     'target_angle': 0.0,
     'deadband': 10,
-    'max_speed': 90
+    'max_speed': 100,
+    'zero_threshold': 0.1
 }
 CSV_FILE = None
 CSV_WRITER = None
@@ -75,7 +76,36 @@ app = Flask(__name__, static_folder='static')
 
 # Import from the compatibility layer
 try:
-    from . import trigger_update_callback
+    # Instead of importing directly, we'll use a function to get the callback
+    # This avoids circular imports
+    _parent_module = None
+    
+    def trigger_update_callback(params):
+        """
+        Trigger the update callback from the parent module, if available.
+        
+        Args:
+            params: Parameters to pass to the callback
+        """
+        global _parent_module
+        if _parent_module is None:
+            # Get the parent module on first call
+            try:
+                import sys
+                # The parent module is 'webpage'
+                _parent_module = sys.modules.get('webpage')
+            except Exception as e:
+                logger.error(f"Error getting parent module: {e}")
+                return
+        
+        # Call the callback function if it exists in the parent module
+        if _parent_module and hasattr(_parent_module, 'trigger_update_callback'):
+            try:
+                _parent_module.trigger_update_callback(params)
+            except Exception as e:
+                logger.error(f"Error calling trigger_update_callback: {e}")
+        else:
+            logger.warning("trigger_update_callback not available")
 except ImportError:
     # Define a dummy function if the import fails
     def trigger_update_callback(params):
@@ -99,6 +129,7 @@ def load_pid_params():
             PID_PARAMS['sample_time'] = int(robot_config.get('SAMPLE_TIME', 0.01) * 1000)
             PID_PARAMS['deadband'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['deadband'])
             PID_PARAMS['max_speed'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['max_speed'])
+            PID_PARAMS['zero_threshold'] = robot_config.get('ZERO_THRESHOLD', PID_PARAMS['zero_threshold'])
             
             logger.info(f"Loaded PID parameters: {PID_PARAMS}")
             logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
@@ -227,7 +258,7 @@ def update_pid_params():
         # Update the parameters with thread safety
         with LOCK:
             # Validate parameters before updating
-            for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time', 'deadband', 'max_speed']:
+            for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time', 'deadband', 'max_speed', 'zero_threshold']:
                 if key in data:
                     try:
                         # Convert to float and validate ranges
@@ -242,6 +273,8 @@ def update_pid_params():
                             return jsonify({"error": "Deadband must be between 0 and 60"}), 400
                         elif key == 'max_speed' and (value < 60 or value > 100):
                             return jsonify({"error": "Max speed must be between 60 and 100"}), 400
+                        elif key == 'zero_threshold' and (value < 0.01 or value > 1.0):
+                            return jsonify({"error": "Zero threshold must be between 0.01 and 1.0"}), 400
                         PID_PARAMS[key] = value
                     except ValueError:
                         return jsonify({"error": f"Invalid value for {key}"}), 400
@@ -275,6 +308,8 @@ def update_pid_params():
                     robot_config['MOTOR_DEADBAND'] = data['deadband']
                 if 'max_speed' in data:
                     robot_config['MAX_MOTOR_SPEED'] = data['max_speed']
+                if 'zero_threshold' in data:
+                    robot_config['ZERO_THRESHOLD'] = data['zero_threshold']
                 
                 # Save updated robot config
                 with open(robot_config_path, 'w') as f:
@@ -286,7 +321,7 @@ def update_pid_params():
                 trigger_update_callback(data)
         except Exception as e:
             logger.error(f"Error updating robot_config.json: {e}")
-            # Continue anyway, as pid_config.json was successfully updated
+            # Continue anyway, as robot_config.json was successfully updated
         
         # Return the updated parameters
         return jsonify(PID_PARAMS)

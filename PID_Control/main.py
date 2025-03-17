@@ -43,7 +43,40 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from pid_controller import PIDController
-from webpage import start_server, stop_server, add_data_point, set_pid_params, update_pid_params, set_update_callback
+
+# Check which import method works for the web server
+try:
+    # First try to import from the webpage package
+    import webpage
+    # Load the functions we need (lazy loading)
+    start_server = webpage.start_server
+    stop_server = webpage.stop_server
+    add_data_point = webpage.add_data_point
+    set_pid_params = webpage.set_pid_params
+    set_update_callback = webpage.set_update_callback
+    update_pid_params = webpage.update_pid_params
+    print("Successfully imported webpage package")
+except ImportError:
+    try:
+        # Fall back to direct import if package doesn't work
+        import web_server
+        # Load the functions we need
+        start_server = web_server.start_server
+        stop_server = web_server.stop_server
+        add_data_point = web_server.add_data_point
+        set_pid_params = web_server.set_pid_params
+        set_update_callback = web_server.set_update_callback
+        update_pid_params = web_server.update_pid_params
+        print("Successfully imported web_server module")
+    except ImportError:
+        # Define dummy functions if neither import works
+        print("Warning: Web dashboard functionality not available - missing modules")
+        def start_server(*args, **kwargs): print("Web server not available")
+        def stop_server(): pass
+        def add_data_point(*args, **kwargs): pass
+        def set_pid_params(*args, **kwargs): pass
+        def set_update_callback(*args): pass
+        def update_pid_params(*args): pass
 
 # Global IMU reference for testing functions
 IMU = None
@@ -63,13 +96,12 @@ def input_available():
 def runtime_parameter_tuning(pid_tuner, balance_controller):
     """
     Self-balancing mode with web dashboard for parameter tuning.
-    Shows real-time angle output in the terminal while allowing parameter tuning via web interface.
+    Shows minimal output in the terminal while allowing parameter tuning via web interface.
     """
     # Import here to avoid circular imports
     from config import CONFIG, load_config, save_config
     
-    print("\n🤖 Self-Balancing Mode with Web Dashboard")
-    print("Connect to the same WiFi network as the robot")
+    print("\nSelf-Balancing Mode with Web Dashboard")
     
     # Get local IP address for easier connection
     local_ip = get_local_ip()
@@ -82,9 +114,11 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     # Start the web server
     try:
         start_server(port=server_port)
-        print("✅ Web dashboard running")
+        print("Web dashboard running")
+        print("Connect to the web interface to see real-time data")
+        print("Press 'Q' to return to menu")
     except Exception as e:
-        print(f"❌ Error starting server: {e}")
+        print(f"Error starting server: {e}")
         return
     
     # Initialize web interface with parameters from config file
@@ -115,6 +149,8 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             CONFIG['MOTOR_DEADBAND'] = params['deadband']
         if 'max_speed' in params:
             CONFIG['MAX_MOTOR_SPEED'] = params['max_speed']
+        if 'zero_threshold' in params:
+            CONFIG['ZERO_THRESHOLD'] = params['zero_threshold']
         
         # Save config to file
         save_config(CONFIG)
@@ -133,20 +169,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         motor_output = debug_info.get('motor_output', abs(output))
         pid_info = debug_info['pid']
         
-        # Initialize timestamp for output rate limiting
-        if not hasattr(debug_callback, 'last_output_time'):
-            debug_callback.last_output_time = 0
-        
-        # Display to terminal (rate-limited to every 200ms)
-        current_time = time.time()
-        if current_time - debug_callback.last_output_time > 0.2:
-            # Clear line and write updated values
-            sys.stdout.write("\r" + " " * 80)
-            sys.stdout.write(f"\rAngle: {roll:6.2f}° | Output: {output:6.1f} | Motor: {motor_output:3.0f}% | P: {pid_info['p_term']:6.1f} | I: {pid_info['i_term']:6.1f} | D: {pid_info['d_term']:6.1f}")
-            sys.stdout.flush()
-            debug_callback.last_output_time = current_time
-        
-        # Send data to web dashboard
+        # Send data to web dashboard only, no terminal output
         add_data_point(
             actual_angle=roll,
             target_angle=0.0,
@@ -157,8 +180,6 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
             pid_output=output,
             motor_output=motor_output
         )
-    
-    print("Starting balancing. Press 'Q' to return to menu.")
     
     # Start balancing with debug display
     balance_controller.start_balancing(debug_callback)
@@ -217,17 +238,17 @@ def main():
     
     # Define a function to print the menu to avoid code duplication
     def print_menu():
-        print("\n🤖 Self-Balancing Robot Control System")
+        print("\nSelf-Balancing Robot Control System")
         print("--------------------------------------")
         print("Using dual motors for better stability and control")
         print("Choose an option:")
-        print("1. 🚀 Start Self-Balancing Mode")
-        print("2. 🔌 Motor Test Mode")
-        print("3. 🎛️ Full Parameter Tuning")
-        print("4. 🔧 Quick PID Tuning")
-        print("5. 📊 Runtime Parameter Tuning")
-        print("6. 🧭 IMU Tuning Mode")
-        print("Q. ❌ Quit Program")
+        print("1. Start Self-Balancing Mode")
+        print("2. Motor Test Mode")
+        print("3. Full Parameter Tuning")
+        print("4. Quick PID Tuning")
+        print("5. Runtime Parameter Tuning")
+        print("6. IMU Tuning Mode")
+        print("Q. Quit Program")
     
     # Print menu the first time
     print_menu()

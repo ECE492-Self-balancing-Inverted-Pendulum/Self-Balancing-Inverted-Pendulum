@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
     'MAX_MOTOR_SPEED': 100, # Maximum motor speed (0-100)
     'SAFE_TILT_LIMIT': 45,  # Safety cutoff angle in degrees
     'DIRECTION_CHANGE_BOOST': 10.0,  # Percentage boost when changing direction (0-100)
+    'ZERO_THRESHOLD': 0.1,  # Threshold below which output is considered zero (0-100)
     
     # Loop timing
     'SAMPLE_TIME': 0.01,  # Time between PID updates (seconds)
