@@ -55,15 +55,15 @@ CONFIG = {
     'pid_config_file': 'robot_config.json'
 }
 PID_PARAMS = {
-    'kp': 1.0,
-    'ki': 0.1,
-    'kd': 0.01,
-    'alpha': 0.2,
-    'sample_time': 10,
+    'P_GAIN': 1.0,
+    'I_GAIN': 0.1,
+    'D_GAIN': 0.01,
+    'IMU_FILTER_ALPHA': 0.2,
+    'SAMPLE_TIME': 10,
     'target_angle': 0.0,
-    'deadband': 10,
-    'max_speed': 100,
-    'zero_threshold': 0.1
+    'MOTOR_DEADBAND': 10,
+    'MAX_MOTOR_SPEED': 100,
+    'ZERO_THRESHOLD': 0.1
 }
 CSV_FILE = None
 CSV_WRITER = None
@@ -120,16 +120,16 @@ def load_pid_params():
             with open(robot_config_path, 'r') as f:
                 robot_config = json.load(f)
                 
-            # Update PID parameters from robot config
-            PID_PARAMS['kp'] = robot_config.get('P_GAIN', PID_PARAMS['kp'])
-            PID_PARAMS['ki'] = robot_config.get('I_GAIN', PID_PARAMS['ki'])
-            PID_PARAMS['kd'] = robot_config.get('D_GAIN', PID_PARAMS['kd'])
-            PID_PARAMS['alpha'] = robot_config.get('IMU_FILTER_ALPHA', PID_PARAMS['alpha'])
+            # Update PID parameters from robot config - using consistent naming
+            PID_PARAMS['P_GAIN'] = robot_config.get('P_GAIN', PID_PARAMS['P_GAIN'])
+            PID_PARAMS['I_GAIN'] = robot_config.get('I_GAIN', PID_PARAMS['I_GAIN'])
+            PID_PARAMS['D_GAIN'] = robot_config.get('D_GAIN', PID_PARAMS['D_GAIN'])
+            PID_PARAMS['IMU_FILTER_ALPHA'] = robot_config.get('IMU_FILTER_ALPHA', PID_PARAMS['IMU_FILTER_ALPHA'])
             # Convert seconds to milliseconds for the web interface
-            PID_PARAMS['sample_time'] = int(robot_config.get('SAMPLE_TIME', 0.01) * 1000)
-            PID_PARAMS['deadband'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['deadband'])
-            PID_PARAMS['max_speed'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['max_speed'])
-            PID_PARAMS['zero_threshold'] = robot_config.get('ZERO_THRESHOLD', PID_PARAMS['zero_threshold'])
+            PID_PARAMS['SAMPLE_TIME'] = int(robot_config.get('SAMPLE_TIME', 0.01) * 1000)
+            PID_PARAMS['MOTOR_DEADBAND'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['MOTOR_DEADBAND'])
+            PID_PARAMS['MAX_MOTOR_SPEED'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['MAX_MOTOR_SPEED'])
+            PID_PARAMS['ZERO_THRESHOLD'] = robot_config.get('ZERO_THRESHOLD', PID_PARAMS['ZERO_THRESHOLD'])
             
             logger.info(f"Loaded PID parameters: {PID_PARAMS}")
             logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
@@ -244,7 +244,29 @@ def update_config():
 @app.route('/api/pid_params')
 def get_pid_params():
     try:
-        return jsonify(PID_PARAMS)
+        # Create a response with frontend parameter names for backward compatibility
+        frontend_names = {
+            'P_GAIN': 'kp',
+            'I_GAIN': 'ki',
+            'D_GAIN': 'kd',
+            'IMU_FILTER_ALPHA': 'alpha',
+            'SAMPLE_TIME': 'sample_time',
+            'MOTOR_DEADBAND': 'deadband',
+            'MAX_MOTOR_SPEED': 'max_speed',
+            'ZERO_THRESHOLD': 'zero_threshold'
+        }
+        
+        response_data = {}
+        for backend_key, frontend_key in frontend_names.items():
+            if backend_key in PID_PARAMS:
+                response_data[frontend_key] = PID_PARAMS[backend_key]
+        
+        # Add any other parameters not mapped
+        for key in PID_PARAMS:
+            if key not in frontend_names and not key.startswith('_'):
+                response_data[key] = PID_PARAMS[key]
+        
+        return jsonify(response_data)
     except Exception as e:
         logger.error(f"Error getting PID parameters: {e}")
         return jsonify({"error": str(e)}), 500
@@ -257,12 +279,26 @@ def update_pid_params():
         
         # Update the parameters with thread safety
         with LOCK:
+            # Create a mapping for legacy frontend parameter names to backend names
+            param_mapping = {
+                'kp': 'P_GAIN', 
+                'ki': 'I_GAIN', 
+                'kd': 'D_GAIN',
+                'alpha': 'IMU_FILTER_ALPHA',
+                'sample_time': 'SAMPLE_TIME',
+                'deadband': 'MOTOR_DEADBAND',
+                'max_speed': 'MAX_MOTOR_SPEED',
+                'zero_threshold': 'ZERO_THRESHOLD'
+            }
+            
             # Validate parameters before updating
             for key in ['kp', 'ki', 'kd', 'alpha', 'sample_time', 'deadband', 'max_speed', 'zero_threshold']:
                 if key in data:
                     try:
                         # Convert to float and validate ranges
                         value = float(data[key])
+                        
+                        # Validate based on the key
                         if key in ['kp', 'ki', 'kd'] and value < 0:
                             return jsonify({"error": f"Parameter {key} cannot be negative"}), 400
                         elif key == 'alpha' and (value < 0.05 or value > 0.95):
@@ -275,7 +311,10 @@ def update_pid_params():
                             return jsonify({"error": "Max speed must be between 60 and 100"}), 400
                         elif key == 'zero_threshold' and (value < 0.01 or value > 1.0):
                             return jsonify({"error": "Zero threshold must be between 0.01 and 1.0"}), 400
-                        PID_PARAMS[key] = value
+                        
+                        # Update the parameter using the mapped key
+                        backend_key = param_mapping.get(key, key)
+                        PID_PARAMS[backend_key] = value
                     except ValueError:
                         return jsonify({"error": f"Invalid value for {key}"}), 400
         
@@ -284,7 +323,7 @@ def update_pid_params():
         # Save to PID config file
         save_pid_params()
         
-        # Also update the robot_config.json file
+        # Also update the robot_config.json file directly - no translation needed now
         try:
             robot_config_path = 'robot_config.json'
             if os.path.exists(robot_config_path):
@@ -292,24 +331,15 @@ def update_pid_params():
                 with open(robot_config_path, 'r') as f:
                     robot_config = json.load(f)
                 
-                # Update PID parameters in robot config
-                if 'kp' in data:
-                    robot_config['P_GAIN'] = data['kp']
-                if 'ki' in data:
-                    robot_config['I_GAIN'] = data['ki']
-                if 'kd' in data:
-                    robot_config['D_GAIN'] = data['kd']
-                if 'alpha' in data:
-                    robot_config['IMU_FILTER_ALPHA'] = data['alpha']
-                if 'sample_time' in data:
-                    # Convert milliseconds to seconds for robot_config
-                    robot_config['SAMPLE_TIME'] = data['sample_time'] / 1000.0
-                if 'deadband' in data:
-                    robot_config['MOTOR_DEADBAND'] = data['deadband']
-                if 'max_speed' in data:
-                    robot_config['MAX_MOTOR_SPEED'] = data['max_speed']
-                if 'zero_threshold' in data:
-                    robot_config['ZERO_THRESHOLD'] = data['zero_threshold']
+                # Update parameters - use direct mapping
+                for backend_key, value in PID_PARAMS.items():
+                    # Only update keys that are in the robot_config
+                    if backend_key in robot_config:
+                        # Convert sample time from ms to seconds
+                        if backend_key == 'SAMPLE_TIME':
+                            robot_config[backend_key] = value / 1000.0
+                        else:
+                            robot_config[backend_key] = value
                 
                 # Save updated robot config
                 with open(robot_config_path, 'w') as f:
@@ -317,14 +347,29 @@ def update_pid_params():
                     
                 logger.info(f"Updated robot_config.json with PID parameters")
                 
+                # Convert back to frontend parameter names for the callback
+                frontend_data = {}
+                for frontend_key, backend_key in param_mapping.items():
+                    if backend_key in PID_PARAMS:
+                        frontend_data[frontend_key] = PID_PARAMS[backend_key]
+                
                 # Trigger the update callback to apply changes in real-time
-                trigger_update_callback(data)
+                trigger_update_callback(frontend_data)
         except Exception as e:
             logger.error(f"Error updating robot_config.json: {e}")
-            # Continue anyway, as robot_config.json was successfully updated
         
-        # Return the updated parameters
-        return jsonify(PID_PARAMS)
+        # Convert to frontend format for response
+        response_data = {}
+        for frontend_key, backend_key in param_mapping.items():
+            if backend_key in PID_PARAMS:
+                response_data[frontend_key] = PID_PARAMS[backend_key]
+        
+        # Include any other parameters 
+        for key in PID_PARAMS:
+            if key not in param_mapping.values():
+                response_data[key] = PID_PARAMS[key]
+                
+        return jsonify(response_data)
     except Exception as e:
         logger.error(f"Error updating PID parameters: {e}")
         return jsonify({"error": str(e)}), 500

@@ -13,7 +13,7 @@ import threading
 logger = logging.getLogger('pid_web_compatibility')
 
 # Define module-level variables that will be populated by the web server module
-PID_PARAMS = {'kp': 0.0, 'ki': 0.0, 'kd': 0.0, 'target_angle': 0.0, 'zero_threshold': 0.1}
+PID_PARAMS = {'P_GAIN': 0.0, 'I_GAIN': 0.0, 'D_GAIN': 0.0, 'target_angle': 0.0, 'ZERO_THRESHOLD': 0.1}
 CONFIG = {}
 _update_callback = None
 _web_server_module = None
@@ -92,15 +92,15 @@ def set_pid_params(kp, ki, kd, target_angle):
         ws = _import_web_server()
         if ws is None:
             # Still update our local copy even if web_server is not available
-            PID_PARAMS['kp'] = float(kp)
-            PID_PARAMS['ki'] = float(ki)
-            PID_PARAMS['kd'] = float(kd)
+            PID_PARAMS['P_GAIN'] = float(kp)
+            PID_PARAMS['I_GAIN'] = float(ki)
+            PID_PARAMS['D_GAIN'] = float(kd)
             PID_PARAMS['target_angle'] = float(target_angle)
             return
         
-        ws.PID_PARAMS['kp'] = float(kp)
-        ws.PID_PARAMS['ki'] = float(ki)
-        ws.PID_PARAMS['kd'] = float(kd)
+        ws.PID_PARAMS['P_GAIN'] = float(kp)
+        ws.PID_PARAMS['I_GAIN'] = float(ki)
+        ws.PID_PARAMS['D_GAIN'] = float(kd)
         ws.PID_PARAMS['target_angle'] = float(target_angle)
         ws.save_pid_params()
     except Exception as e:
@@ -115,16 +115,33 @@ def update_pid_params(params_dict):
     """
     try:
         ws = _import_web_server()
+        
+        # Parameter name mapping from frontend to backend
+        param_mapping = {
+            'kp': 'P_GAIN', 
+            'ki': 'I_GAIN', 
+            'kd': 'D_GAIN',
+            'alpha': 'IMU_FILTER_ALPHA',
+            'sample_time': 'SAMPLE_TIME',
+            'deadband': 'MOTOR_DEADBAND',
+            'max_speed': 'MAX_MOTOR_SPEED',
+            'zero_threshold': 'ZERO_THRESHOLD'
+        }
+        
         if ws is None:
             # Still update our local copy even if web_server is not available
             for key, value in params_dict.items():
-                if key in PID_PARAMS:
-                    PID_PARAMS[key] = float(value)
+                # Map frontend key to backend key if needed
+                backend_key = param_mapping.get(key, key)
+                if backend_key in PID_PARAMS:
+                    PID_PARAMS[backend_key] = float(value)
             return
         
         for key, value in params_dict.items():
-            if key in ws.PID_PARAMS:
-                ws.PID_PARAMS[key] = float(value)
+            # Map frontend key to backend key if needed
+            backend_key = param_mapping.get(key, key)
+            if backend_key in ws.PID_PARAMS:
+                ws.PID_PARAMS[backend_key] = float(value)
         ws.save_pid_params()
     except Exception as e:
         logger.error(f"Error in update_pid_params: {e}")

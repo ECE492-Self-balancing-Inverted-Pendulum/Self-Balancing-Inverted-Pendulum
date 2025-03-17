@@ -50,8 +50,19 @@ class PIDController:
         self.kp = config['P_GAIN']         # Proportional gain
         self.ki = config['I_GAIN']         # Integral gain
         self.kd = config['D_GAIN']         # Derivative gain
-        self.setpoint = config['SETPOINT'] # Target value
-        self.max_i_term = config['MAX_I_TERM']
+        
+        # Use target_angle if available, otherwise fall back to SETPOINT
+        if 'target_angle' in config:
+            self.setpoint = config['target_angle']  # Target value
+        elif 'SETPOINT' in config:
+            self.setpoint = config['SETPOINT']  # Target value
+        else:
+            # Default to zero if neither is available
+            self.setpoint = 0.0
+            print("Warning: Neither target_angle nor SETPOINT found in config, defaulting to 0.0")
+            
+        # Get MAX_I_TERM from config or use a default value
+        self.max_i_term = config.get('MAX_I_TERM', 20.0)
         
         # PID state variables
         self.prev_error = 0.0

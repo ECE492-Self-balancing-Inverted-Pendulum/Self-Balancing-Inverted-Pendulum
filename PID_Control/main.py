@@ -122,6 +122,8 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         return
     
     # Initialize web interface with parameters from config file
+    # Note: set_pid_params still uses positional args (kp, ki, kd, target_angle)
+    # but internally it will map to the correct parameter names
     set_pid_params(
         CONFIG['P_GAIN'],
         CONFIG['I_GAIN'],
@@ -135,6 +137,7 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
     # Set up callback for parameter updates
     def params_update_callback(params):
         # First, update the config file (source of truth)
+        # This correctly maps the frontend parameters to CONFIG keys
         if 'kp' in params:
             CONFIG['P_GAIN'] = params['kp']
         if 'ki' in params:

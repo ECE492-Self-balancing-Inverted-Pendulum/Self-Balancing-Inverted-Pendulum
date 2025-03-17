@@ -1,11 +1,11 @@
 {
-    "kp": 19.2,
-    "ki": 0.1,
-    "kd": 1.0,
-    "alpha": 0.2,
-    "sample_time": 10.0,
+    "P_GAIN": 19.2,
+    "I_GAIN": 0.1,
+    "D_GAIN": 1.0,
+    "IMU_FILTER_ALPHA": 0.2,
+    "SAMPLE_TIME": 10.0,
     "target_angle": 0.0,
-    "deadband": 60.0,
-    "max_speed": 100.0,
-    "zero_threshold": 0.1
+    "MOTOR_DEADBAND": 60.0,
+    "MAX_MOTOR_SPEED": 100.0,
+    "ZERO_THRESHOLD": 0.1
 }

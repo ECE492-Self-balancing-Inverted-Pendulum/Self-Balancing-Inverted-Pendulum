@@ -10,6 +10,11 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #f8f9fa;
             padding-bottom: 20px;
+            padding-top: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            padding-bottom: 70px; /* Make room for the footer */
         }
         .chart-container {
             position: relative;
@@ -42,7 +47,8 @@
         .slider-label {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 5px;
+            font-size: 0.8em;
+            color: #666;
         }
         .form-range::-webkit-slider-thumb {
             background: #0d6efd;
@@ -54,12 +60,120 @@
             .chart-container {
                 height: 250px;
             }
+            .col-md-4, .col-md-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .input-group .input-group-text {
+                flex: 0 0 auto;
         }
         #toast-container {
             position: fixed;
             top: 20px;
             right: 20px;
             z-index: 1000;
+        }
+        canvas {
+            margin-bottom: 20px;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #f5f5f5;
+            border-top: 1px solid #ddd;
+            padding: 10px 0;
+            text-align: center;
+        }
+        #error-message {
+            display: none;
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 0.25rem;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        
+        /* Toast Messages */
+        .toast-message {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 4px;
+            color: white;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 300px;
+        }
+        
+        .toast-message.show {
+            opacity: 0.9;
+            transform: translateY(-10px);
+        }
+        
+        .toast-success {
+            background-color: #28a745;
+        }
+        
+        .toast-error {
+            background-color: #dc3545;
+        }
+        
+        .toast-info {
+            background-color: #17a2b8;
+        }
+        
+        /* Enhanced styling for PID parameter controls */
+        .input-group-text {
+            padding: 0.1rem 0.5rem;
+        }
+        
+        .btn-sm.py-0 {
+            padding-top: 0.1rem;
+            padding-bottom: 0.1rem;
+            font-size: 0.7rem;
+        }
+        
+        .card-header h5 {
+            margin-bottom: 0;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            margin-bottom: 0.2rem;
+        }
+        
+        .card-body {
+            padding: 1.25rem;
+        }
+        
+        hr.my-1 {
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+            opacity: 0.5;
+        }
+        
+        /* Mobile responsive adjustments */
+        @media (max-width: 768px) {
+            .col-md-4, .col-md-6 {
+                margin-bottom: 0.5rem;
+            }
+            
+            .input-group .input-group-text {
+                flex: 0 0 auto;
+            }
+            
+            .card-body {
+                padding: 0.75rem;
+            }
+            
+            .input-group {
+                flex-wrap: nowrap;
+            }
         }
     </style>
 </head>
@@ -118,117 +232,136 @@
             <!-- PID Parameters -->
             <div class="col-md-6 mb-3">
                 <div class="card h-100">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">PID Parameters</h5>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="toggle-advanced-params">
+                            Show/Hide Advanced
+                        </button>
                     </div>
                     <div class="card-body">
                         <form id="pid-form">
-                            <div class="mb-3">
-                                <label for="kp-input" class="form-label">Proportional (KP)</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="kp-input" step="0.1" min="0" max="50">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="kp-input">-0.1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="kp-input">+0.1</button>
+                            <!-- Primary PID Controls (Always visible) -->
+                            <div class="row mb-4">
+                                <div class="col-12 mb-3">
+                                    <h6 class="text-primary">Main PID Parameters</h6>
+                                    <hr class="my-1">
                                 </div>
-                                <div class="slider-label">
-                                    <span>0</span>
-                                    <span>50</span>
+                                <!-- Proportional Control -->
+                                <div class="col-md-4 mb-3">
+                                    <label for="kp-input" class="form-label">Proportional (KP)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="kp-input" step="0.1" min="0" max="50" tabindex="1">
+                                        <div class="input-group-text px-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="kp-input">-</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="kp-input">+</button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <input type="range" class="form-range" id="kp-slider" min="0" max="50" step="0.1" value="1.0">
+                                
+                                <!-- Integral Control -->
+                                <div class="col-md-4 mb-3">
+                                    <label for="ki-input" class="form-label">Integral (KI)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="ki-input" step="0.01" min="0" max="5" tabindex="2">
+                                        <div class="input-group-text px-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="ki-input">-</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="ki-input">+</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Derivative Control -->
+                                <div class="col-md-4 mb-3">
+                                    <label for="kd-input" class="form-label">Derivative (KD)</label>
+                                    <div class="input-group">
+                                        <input type="number" class="form-control" id="kd-input" step="0.1" min="0" max="10" tabindex="3">
+                                        <div class="input-group-text px-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="kd-input">-</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="kd-input">+</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="ki-input" class="form-label">Integral (KI)</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="ki-input" step="0.01" min="0" max="5">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="ki-input">-0.1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="ki-input">+0.1</button>
+                            
+                            <!-- Advanced Parameters (Can be toggled) -->
+                            <div id="advanced-params-section">
+                                <div class="row mb-3">
+                                    <div class="col-12 mb-2">
+                                        <h6 class="text-secondary">Motor Parameters</h6>
+                                        <hr class="my-1">
+                                    </div>
+                                    
+                                    <!-- Deadband -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="deadband-input" class="form-label">Motor Deadband</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="deadband-input" step="1" min="0" max="60" tabindex="4">
+                                            <div class="input-group-text px-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="deadband-input">-</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="deadband-input">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Max Speed -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="max-speed-input" class="form-label">Max Motor Speed</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="max-speed-input" step="1" min="60" max="100" tabindex="5">
+                                            <div class="input-group-text px-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="max-speed-input">-</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="max-speed-input">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="slider-label">
-                                    <span>0</span>
-                                    <span>5</span>
+                                
+                                <div class="row mb-4">
+                                    <div class="col-12 mb-2">
+                                        <h6 class="text-secondary">Sensor & Timing Parameters</h6>
+                                        <hr class="my-1">
+                                    </div>
+                                    
+                                    <!-- IMU Filter Alpha -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="alpha-input" class="form-label">IMU Filter Alpha</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="alpha-input" step="0.01" min="0.05" max="0.95" tabindex="6">
+                                            <div class="input-group-text px-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="alpha-input">-</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="alpha-input">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Sample Time -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="sample-time-input" class="form-label">Sample Time (ms)</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="sample-time-input" step="1" min="5" max="20" tabindex="7">
+                                            <div class="input-group-text px-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="sample-time-input">-</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="sample-time-input">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Zero Threshold -->
+                                    <div class="col-md-4 mb-3">
+                                        <label for="zero-threshold-input" class="form-label">Zero Threshold</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="zero-threshold-input" step="0.01" min="0.01" max="1.0" tabindex="8">
+                                            <div class="input-group-text px-1">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-action="fine-decrease" data-target="zero-threshold-input">-</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-action="fine-increase" data-target="zero-threshold-input">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <input type="range" class="form-range" id="ki-slider" min="0" max="5" step="0.01" value="0.1">
                             </div>
-                            <div class="mb-3">
-                                <label for="kd-input" class="form-label">Derivative (KD)</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="kd-input" step="0.1" min="0" max="10">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="kd-input">-0.1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="kd-input">+0.1</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>0</span>
-                                    <span>10</span>
-                                </div>
-                                <input type="range" class="form-range" id="kd-slider" min="0" max="10" step="0.1" value="0.1">
-                            </div>
-                            <div class="mb-3">
-                                <label for="alpha-input" class="form-label">IMU Filter Alpha</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="alpha-input" step="0.01" min="0.05" max="0.95">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="alpha-input">-0.01</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="alpha-input">+0.01</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>0.05 (Smoother)</span>
-                                    <span>0.95 (Responsive)</span>
-                                </div>
-                                <input type="range" class="form-range" id="alpha-slider" min="0.05" max="0.95" step="0.01" value="0.2">
-                            </div>
-                            <div class="mb-3">
-                                <label for="sample-time-input" class="form-label">Sample Time (ms)</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="sample-time-input" step="1" min="5" max="20">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="sample-time-input">-1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="sample-time-input">+1</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>5ms (Fast)</span>
-                                    <span>20ms (Slow)</span>
-                                </div>
-                                <input type="range" class="form-range" id="sample-time-slider" min="5" max="20" step="1" value="10">
-                            </div>
-                            <div class="mb-3">
-                                <label for="deadband-input" class="form-label">Motor Deadband</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="deadband-input" step="1" min="0" max="60">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="deadband-input">-1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="deadband-input">+1</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>0 (No deadband)</span>
-                                    <span>60 (High deadband)</span>
-                                </div>
-                                <input type="range" class="form-range" id="deadband-slider" min="0" max="60" step="1" value="10">
-                            </div>
-                            <div class="mb-3">
-                                <label for="max-speed-input" class="form-label">Max Motor Speed</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="max-speed-input" step="1" min="60" max="100">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="max-speed-input">-1</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="max-speed-input">+1</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>60 (Slower)</span>
-                                    <span>100 (Faster)</span>
-                                </div>
-                                <input type="range" class="form-range" id="max-speed-slider" min="60" max="100" step="1" value="90">
-                            </div>
-                            <div class="mb-3">
-                                <label for="zero-threshold-input" class="form-label">Zero Threshold</label>
-                                <div class="input-group mb-2">
-                                    <input type="number" class="form-control" id="zero-threshold-input" step="0.01" min="0.01" max="1.0">
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-decrease" data-target="zero-threshold-input">-0.01</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-action="fine-increase" data-target="zero-threshold-input">+0.01</button>
-                                </div>
-                                <div class="slider-label">
-                                    <span>0.01 (Sensitive)</span>
-                                    <span>1.0 (Less responsive)</span>
-                                </div>
-                                <input type="range" class="form-range" id="zero-threshold-slider" min="0.01" max="1.0" step="0.01" value="0.1">
-                            </div>
+                            
                             <div class="d-grid">
-                                <button type="submit" class="btn btn-primary">Update Parameters</button>
+                                <button type="submit" class="btn btn-primary" tabindex="9">Update Parameters</button>
                             </div>
                         </form>
                     </div>
@@ -323,6 +456,7 @@
                     return response.json();
                 })
                 .then(data => {
+                    // Update input values only
                     document.getElementById('kp-input').value = data.kp;
                     document.getElementById('ki-input').value = data.ki;
                     document.getElementById('kd-input').value = data.kd;
@@ -331,16 +465,6 @@
                     document.getElementById('deadband-input').value = data.deadband || 10;
                     document.getElementById('max-speed-input').value = data.max_speed || 90;
                     document.getElementById('zero-threshold-input').value = data.zero_threshold || 0.1;
-                    
-                    // Update sliders to match input values
-                    document.getElementById('kp-slider').value = data.kp;
-                    document.getElementById('ki-slider').value = data.ki;
-                    document.getElementById('kd-slider').value = data.kd;
-                    document.getElementById('alpha-slider').value = data.alpha;
-                    document.getElementById('sample-time-slider').value = data.sample_time;
-                    document.getElementById('deadband-slider').value = data.deadband || 10;
-                    document.getElementById('max-speed-slider').value = data.max_speed || 90;
-                    document.getElementById('zero-threshold-slider').value = data.zero_threshold || 0.1;
                 })
                 .catch(error => {
                     console.error('Error fetching PID parameters:', error);
@@ -348,81 +472,142 @@
                 });
         }
         
-        // Initially update the parameters
-        updatePIDParams();
+        // Initialize with advanced parameters hidden - moved to document ready function
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize advanced parameters section
+            const advancedSection = document.getElementById('advanced-params-section');
+            advancedSection.style.display = 'none';
+            document.getElementById('toggle-advanced-params').textContent = 'Show Advanced';
+            
+            // Initially update the parameters
+            updatePIDParams();
+            
+            // Add a periodic check to update parameters
+            setInterval(updatePIDParams, 10000); // Update every 10 seconds
+        });
         
         // Set up form submission
-        document.getElementById('pid-form').addEventListener('submit', function(event) {
-            event.preventDefault();
+        document.getElementById('pid-form').addEventListener('submit', function(e) {
+            e.preventDefault();
             
-            // Show a loading message
-            showToast('Updating parameters...', 'info');
+            // Get values from input fields
+            const kp = parseFloat(document.getElementById('kp-input').value);
+            const ki = parseFloat(document.getElementById('ki-input').value);
+            const kd = parseFloat(document.getElementById('kd-input').value);
+            const alpha = parseFloat(document.getElementById('alpha-input').value);
+            const sample_time = parseFloat(document.getElementById('sample-time-input').value);
+            const deadband = parseFloat(document.getElementById('deadband-input').value);
+            const max_speed = parseFloat(document.getElementById('max-speed-input').value);
+            const zero_threshold = parseFloat(document.getElementById('zero-threshold-input').value);
             
-            const params = {
-                kp: parseFloat(document.getElementById('kp-input').value),
-                ki: parseFloat(document.getElementById('ki-input').value),
-                kd: parseFloat(document.getElementById('kd-input').value),
-                alpha: parseFloat(document.getElementById('alpha-input').value),
-                sample_time: parseFloat(document.getElementById('sample-time-input').value),
-                deadband: parseFloat(document.getElementById('deadband-input').value),
-                max_speed: parseFloat(document.getElementById('max-speed-input').value),
-                zero_threshold: parseFloat(document.getElementById('zero-threshold-input').value)
-            };
-            
-            // Validate values before sending
-            if (isNaN(params.kp) || isNaN(params.ki) || isNaN(params.kd) || 
-                isNaN(params.alpha) || isNaN(params.sample_time) ||
-                isNaN(params.deadband) || isNaN(params.max_speed) ||
-                isNaN(params.zero_threshold)) {
-                showError('Invalid parameter values. Please check your inputs.');
+            // Validate input values
+            if (isNaN(kp) || isNaN(ki) || isNaN(kd) || isNaN(alpha) || isNaN(sample_time) || 
+                isNaN(deadband) || isNaN(max_speed) || isNaN(zero_threshold)) {
+                showError('Invalid input values. Please check all fields.');
                 return;
             }
             
+            // Send to server
             fetch('/api/pid_params', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(params)
+                body: JSON.stringify({
+                    kp, ki, kd, alpha, sample_time, deadband, max_speed, zero_threshold
+                })
             })
             .then(response => {
                 if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.error || `Network error: ${response.status}`);
-                    });
+                    throw new Error(`Network error: ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
-                updatePIDParams();
-                showToast('Parameters updated successfully!', 'success');
+                showToast('PID parameters updated successfully!', 'success');
+                console.log('Updated PID parameters:', data);
             })
             .catch(error => {
-                console.error('Error:', error);
-                showError('Error updating parameters: ' + error.message);
+                console.error('Error updating PID parameters:', error);
+                showError('Failed to update PID parameters: ' + error.message);
             });
         });
         
-        // Fine adjustment buttons
-        document.querySelectorAll('[data-action]').forEach(button => {
+        // Setup fine adjustment buttons
+        document.querySelectorAll('[data-action^="fine-"]').forEach(button => {
             button.addEventListener('click', function() {
+                const target = this.getAttribute('data-target');
                 const action = this.getAttribute('data-action');
-                const targetId = this.getAttribute('data-target');
-                const input = document.getElementById(targetId);
-                let value = parseFloat(input.value) || 0;
+                const inputEl = document.getElementById(target);
+                if (!inputEl) return;
+                
+                let value = parseFloat(inputEl.value) || 0;
+                const step = parseFloat(inputEl.getAttribute('step')) || 0.1;
                 
                 if (action === 'fine-increase') {
-                    value += 0.1;
+                    value += step;
                 } else if (action === 'fine-decrease') {
-                    value -= 0.1;
+                    value -= step;
                 }
                 
-                input.value = parseFloat(value.toFixed(2));
+                // Ensure the value is within the valid range
+                const min = parseFloat(inputEl.getAttribute('min'));
+                const max = parseFloat(inputEl.getAttribute('max'));
+                
+                if (!isNaN(min) && value < min) value = min;
+                if (!isNaN(max) && value > max) value = max;
+                
+                // Update input value
+                inputEl.value = value;
             });
         });
         
-        // Add a periodic check to update parameters
-        setInterval(updatePIDParams, 10000); // Update every 10 seconds
+        // Toggle advanced parameters section
+        document.getElementById('toggle-advanced-params').addEventListener('click', function() {
+            const advancedSection = document.getElementById('advanced-params-section');
+            if (advancedSection.style.display === 'none') {
+                advancedSection.style.display = 'block';
+                this.textContent = 'Hide Advanced';
+            } else {
+                advancedSection.style.display = 'none';
+                this.textContent = 'Show Advanced';
+            }
+        });
+        
+        // Enable Enter key to submit the form
+        document.querySelectorAll('#pid-form input[type="number"]').forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Check if there's a next input to focus
+                    const inputs = Array.from(document.querySelectorAll('#pid-form input[type="number"]'));
+                    const currentIndex = inputs.indexOf(this);
+                    
+                    if (currentIndex < inputs.length - 1) {
+                        // Focus the next input
+                        inputs[currentIndex + 1].focus();
+                    } else {
+                        // If it's the last input, submit the form
+                        document.getElementById('pid-form').dispatchEvent(new Event('submit'));
+                    }
+                }
+            });
+        });
+        
+        // Create custom sliders that show up on hover for cleaner UI
+        document.querySelectorAll('#pid-form .input-group').forEach(group => {
+            const input = group.querySelector('input[type="number"]');
+            if (!input) return;
+            
+            // Show slider on input focus
+            input.addEventListener('focus', function() {
+                const id = this.id;
+                const sliderContainer = document.getElementById(`${id}-slider-container`);
+                if (sliderContainer) {
+                    sliderContainer.style.display = 'block';
+                }
+            });
+        });
     </script>
 </body>
 </html> 

@@ -20,3 +20,15 @@
 2025-03-17 16:18:35,824 - pid_web_server - INFO - Updated PID parameters: {'kp': 19.2, 'ki': 0.1, 'kd': 1.0, 'alpha': 0.2, 'sample_time': 10.0, 'target_angle': 0.0, 'deadband': 60.0, 'max_speed': 100.0, 'zero_threshold': 0.1}
 2025-03-17 16:18:35,825 - pid_web_server - INFO - Saved PID parameters: {'kp': 19.2, 'ki': 0.1, 'kd': 1.0, 'alpha': 0.2, 'sample_time': 10.0, 'target_angle': 0.0, 'deadband': 60.0, 'max_speed': 100.0, 'zero_threshold': 0.1}
 2025-03-17 16:18:35,826 - pid_web_server - INFO - Updated robot_config.json with PID parameters
+2025-03-17 17:46:32,670 - pid_web_server - INFO - Loaded PID parameters: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:46:32,670 - pid_web_server - INFO - Updated PID parameters from robot_config.json: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:46:37,677 - pid_web_server - INFO - Starting server in debug mode on http://0.0.0.0:5000/
+2025-03-17 17:46:37,691 - pid_web_server - INFO - Shutting down server...
+2025-03-17 17:46:37,692 - pid_web_server - INFO - Saved PID parameters: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:46:37,692 - pid_web_server - INFO - Server shutdown complete
+2025-03-17 17:51:16,383 - pid_web_server - INFO - Loaded PID parameters: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10000, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:51:16,383 - pid_web_server - INFO - Updated PID parameters from robot_config.json: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10000, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:51:21,392 - pid_web_server - INFO - Server started on http://0.0.0.0:8080/
+2025-03-17 17:51:21,394 - pid_web_server - INFO - Saved PID parameters: {'P_GAIN': 19.2, 'I_GAIN': 0.1, 'D_GAIN': 1.0, 'IMU_FILTER_ALPHA': 0.2, 'SAMPLE_TIME': 10000, 'target_angle': 0.0, 'MOTOR_DEADBAND': 60, 'MAX_MOTOR_SPEED': 100, 'ZERO_THRESHOLD': 0.1}
+2025-03-17 17:51:42,230 - pid_web_server - INFO - Server stopped
+2025-03-17 17:51:45,631 - pid_web_server - WARNING - Server is not running
