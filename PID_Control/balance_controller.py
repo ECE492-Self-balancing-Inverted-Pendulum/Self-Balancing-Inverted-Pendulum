@@ -143,7 +143,7 @@ class BalanceController:
         elif deadband > 0:
             # Map the speed from [0-100] to [deadband-max_speed]
             # Formula: new_speed = (speed / 100) * (max_speed - deadband) + deadband
-            µµ
+            speed = (speed / 100) * (max_speed - deadband) + deadband
         
         # Ensure speed is within limits
         speed = min(max(0, speed), max_speed)

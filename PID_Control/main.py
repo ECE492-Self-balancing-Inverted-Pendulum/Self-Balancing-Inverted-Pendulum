@@ -215,17 +215,22 @@ def main():
     global IMU
     IMU = imu
     
-    print("\n🤖 Self-Balancing Robot Control System")
-    print("--------------------------------------")
-    print("Using dual motors for better stability and control")
-    print("Choose an option:")
-    print("1. 🚀 Start Self-Balancing Mode")
-    print("2. 🔌 Motor Test Mode")
-    print("3. 🎛️ Full Parameter Tuning")
-    print("4. 🔧 Quick PID Tuning")
-    print("5. 📊 Runtime Parameter Tuning")
-    print("6. 🧭 IMU Tuning Mode")
-    print("Q. ❌ Quit Program")
+    # Define a function to print the menu to avoid code duplication
+    def print_menu():
+        print("\n🤖 Self-Balancing Robot Control System")
+        print("--------------------------------------")
+        print("Using dual motors for better stability and control")
+        print("Choose an option:")
+        print("1. 🚀 Start Self-Balancing Mode")
+        print("2. 🔌 Motor Test Mode")
+        print("3. 🎛️ Full Parameter Tuning")
+        print("4. 🔧 Quick PID Tuning")
+        print("5. 📊 Runtime Parameter Tuning")
+        print("6. 🧭 IMU Tuning Mode")
+        print("Q. ❌ Quit Program")
+    
+    # Print menu the first time
+    print_menu()
     
     try:
         while True:
@@ -238,27 +243,49 @@ def main():
                     balance_controller.start_balancing(debug_callback=None)
                 except KeyboardInterrupt:
                     print("\nBalancing interrupted by user.")
+                # Reprint menu after returning from submenu
+                print_menu()
                     
             elif choice == '2':
                 motors.dual_motor_test()
+                # Reprint menu after returning from submenu
+                print_menu()
+                
             elif choice == '3':
                 # Update config with tuned parameters
                 pid_tuner.tune_parameters()
                 # Update the balance controller with the new configuration
                 balance_controller = BalanceController(imu, motors, CONFIG)
+                # Reprint menu after returning from submenu
+                print_menu()
+                
             elif choice == '4':
                 # Quick tuning of just the P, I, and D gains
                 pid_tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN', 'D_GAIN', 'IMU_FILTER_ALPHA', 'DIRECTION_CHANGE_BOOST'])
                 # Update the balance controller with the new configuration
                 balance_controller = BalanceController(imu, motors, CONFIG)
+                # Reprint menu after returning from submenu
+                print_menu()
+                
             elif choice == '5':
                 runtime_parameter_tuning(pid_tuner, balance_controller)
+                # Reprint menu after returning from submenu
+                print_menu()
+                
             elif choice == '6':
                 imu.imu_tuning_mode()
+                # Reprint menu after returning from submenu
+                print_menu()
+                
             elif choice == 'q':
                 print("Exiting program...")
                 motors.cleanup()
                 break
+                
+            else:
+                # If invalid option selected, reprint the menu
+                print("\nInvalid option. Please try again.")
+                print_menu()
     except KeyboardInterrupt:
         print("\nProgram interrupted.")
     finally:

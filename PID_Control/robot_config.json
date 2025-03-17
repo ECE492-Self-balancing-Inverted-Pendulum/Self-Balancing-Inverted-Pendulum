@@ -1,5 +1,5 @@
 {
-    "P_GAIN": 15.0,
+    "P_GAIN": 10.0,
     "I_GAIN": 0.1,
     "D_GAIN": 1.0,
     "MAX_I_TERM": 20,
