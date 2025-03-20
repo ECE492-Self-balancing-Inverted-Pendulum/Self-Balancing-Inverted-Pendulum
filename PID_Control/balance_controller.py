@@ -50,9 +50,18 @@ from motorController import MotorControl, DualMotorControl
 
 class BalanceController:
     """
-    Controller for self-balancing robot that uses PID control.
-    Handles the interaction between sensors, PID algorithm, and motor control.
-    Supports both single motor and dual motor configurations.
+    Main controller for the self-balancing robot.
+    
+    This class coordinates between the IMU, motor control, and PID controller to maintain balance.
+    
+    Attributes:
+        imu: IMU reader instance
+        motor: Motor control instance
+        pid: PID controller instance
+        sample_time: Loop timing in seconds
+        last_direction: Last motor direction for boost logic
+        enable_debug: Whether to print debug information
+        running: Whether the balancing loop is currently running
     """
     
     def __init__(self, imu, motor, config):
@@ -68,6 +77,24 @@ class BalanceController:
         self.motor = motor
         self.config = config
         
+        # Ensure config has all required keys with consistent naming
+        # Add default values if keys are missing to prevent KeyError
+        if 'P_GAIN' not in config:
+            print("Warning: P_GAIN not found in config, using default value 5.0")
+            config['P_GAIN'] = 5.0
+            
+        if 'I_GAIN' not in config:
+            print("Warning: I_GAIN not found in config, using default value 0.1")
+            config['I_GAIN'] = 0.1
+            
+        if 'D_GAIN' not in config:
+            print("Warning: D_GAIN not found in config, using default value 1.0")
+            config['D_GAIN'] = 1.0
+            
+        if 'SAMPLE_TIME' not in config:
+            print("Warning: SAMPLE_TIME not found in config, using default value 0.01")
+            config['SAMPLE_TIME'] = 0.01
+            
         # Initialize PID controller
         self.pid = PIDController(config)
         

@@ -47,19 +47,18 @@ class PIDController:
         Args:
             config: Dictionary containing PID parameters
         """
-        self.kp = config['P_GAIN']         # Proportional gain
-        self.ki = config['I_GAIN']         # Integral gain
-        self.kd = config['D_GAIN']         # Derivative gain
+        # Get required parameters with defaults if not present
+        self.kp = config.get('P_GAIN', 5.0)
+        self.ki = config.get('I_GAIN', 0.1)
+        self.kd = config.get('D_GAIN', 1.0)
         
         # Use target_angle if available, otherwise fall back to SETPOINT
         if 'target_angle' in config:
-            self.setpoint = config['target_angle']  # Target value
+            self.setpoint = config['target_angle']
         elif 'SETPOINT' in config:
-            self.setpoint = config['SETPOINT']  # Target value
+            self.setpoint = config['SETPOINT']
         else:
-            # Default to zero if neither is available
             self.setpoint = 0.0
-            print("Warning: Neither target_angle nor SETPOINT found in config, defaulting to 0.0")
             
         # Get MAX_I_TERM from config or use a default value
         self.max_i_term = config.get('MAX_I_TERM', 20.0)

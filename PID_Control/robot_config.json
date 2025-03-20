@@ -3,7 +3,7 @@
     "I_GAIN": 0.1,
     "D_GAIN": 1.0,
     "IMU_FILTER_ALPHA": 0.2,
-    "SAMPLE_TIME": 10000,
+    "SAMPLE_TIME": 10000000000,
     "target_angle": 0.0,
     "MOTOR_DEADBAND": 60,
     "MAX_MOTOR_SPEED": 100,

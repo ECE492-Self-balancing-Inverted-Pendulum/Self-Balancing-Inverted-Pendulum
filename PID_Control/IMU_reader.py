@@ -37,6 +37,7 @@ import sys
 import select
 import tty
 import termios
+import busio
 
 try:
     import board
@@ -112,8 +113,22 @@ class IMUReader:
                  Higher = more responsive, Lower = smoother
             upside_down: Whether the IMU is mounted upside-down
         """
-        self.i2c = board.I2C()  # Setup I2C communication
-        self.imu = adafruit_icm20x.ICM20948(self.i2c)  # Initialize IMU sensor
+        # Create I2C interface
+        self.i2c = busio.I2C(board.SCL, board.SDA)
+        
+        # Try to initialize the IMU at the detected address 0x0c
+        try:
+            self.imu = adafruit_icm20x.ICM20948(self.i2c, address=0x0c)  # Try the detected address
+            print("IMU initialized with address 0x0c")
+        except ValueError:
+            # Fall back to the default address if that fails
+            try:
+                self.imu = adafruit_icm20x.ICM20948(self.i2c)  # Default address
+                print("IMU initialized with default address")
+            except ValueError as e:
+                print(f"Error initializing IMU: {e}")
+                print("Try checking connections and I2C address (use i2cdetect -y 1)")
+                raise
         
         # Set alpha for filter responsiveness
         self.ALPHA = alpha if alpha is not None else self.DEFAULT_ALPHA

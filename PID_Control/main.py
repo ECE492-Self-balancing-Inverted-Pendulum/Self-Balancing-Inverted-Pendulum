@@ -147,7 +147,8 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if 'alpha' in params:
             CONFIG['IMU_FILTER_ALPHA'] = params['alpha']
         if 'sample_time' in params:
-            CONFIG['SAMPLE_TIME'] = params['sample_time'] / 1000.0  # Convert ms to seconds
+            # Don't convert - just use the value directly
+            CONFIG['SAMPLE_TIME'] = params['sample_time']
         if 'deadband' in params:
             CONFIG['MOTOR_DEADBAND'] = params['deadband']
         if 'max_speed' in params:

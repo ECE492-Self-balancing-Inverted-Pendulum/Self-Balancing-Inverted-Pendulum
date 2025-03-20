@@ -125,11 +125,17 @@ def load_pid_params():
             PID_PARAMS['I_GAIN'] = robot_config.get('I_GAIN', PID_PARAMS['I_GAIN'])
             PID_PARAMS['D_GAIN'] = robot_config.get('D_GAIN', PID_PARAMS['D_GAIN'])
             PID_PARAMS['IMU_FILTER_ALPHA'] = robot_config.get('IMU_FILTER_ALPHA', PID_PARAMS['IMU_FILTER_ALPHA'])
-            # Convert seconds to milliseconds for the web interface
-            PID_PARAMS['SAMPLE_TIME'] = int(robot_config.get('SAMPLE_TIME', 0.01) * 1000)
+            
+            # IMPORTANT: Don't multiply SAMPLE_TIME here - this was causing the large values
+            PID_PARAMS['SAMPLE_TIME'] = robot_config.get('SAMPLE_TIME', 10)
+            
             PID_PARAMS['MOTOR_DEADBAND'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['MOTOR_DEADBAND'])
             PID_PARAMS['MAX_MOTOR_SPEED'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['MAX_MOTOR_SPEED'])
             PID_PARAMS['ZERO_THRESHOLD'] = robot_config.get('ZERO_THRESHOLD', PID_PARAMS['ZERO_THRESHOLD'])
+            
+            # Make sure target_angle is loaded properly too
+            if 'target_angle' in robot_config:
+                PID_PARAMS['target_angle'] = robot_config.get('target_angle', 0.0)
             
             logger.info(f"Loaded PID parameters: {PID_PARAMS}")
             logger.info(f"Updated PID parameters from robot_config.json: {PID_PARAMS}")
