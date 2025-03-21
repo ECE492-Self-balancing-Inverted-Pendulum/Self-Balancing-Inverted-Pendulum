@@ -52,7 +52,8 @@ CONFIG = {
     'csv_logging': False,
     'time_window': 10,  # seconds
     'max_data_points': 1000,  # Maximum number of data points to store
-    'pid_config_file': 'robot_config.json'
+    'config_file': 'robot_config.json',
+    'pid_config_file': 'robot_config.json'  # Ensure consistent use of robot_config.json
 }
 PID_PARAMS = {
     'P_GAIN': 1.0,
@@ -144,14 +145,15 @@ def load_pid_params():
 
 # Save PID parameters to file
 def save_pid_params():
-    """Save PID parameters to file with proper error handling and thread safety"""
+    """Save PID parameters to robot_config.json with proper error handling and thread safety"""
     try:
         with LOCK:  # Use thread lock when accessing shared resources
+            # Using CONFIG['pid_config_file'] which is set to robot_config.json
             with open(CONFIG['pid_config_file'], 'w') as f:
                 json.dump(PID_PARAMS, f, indent=4)
-                logger.info(f"Saved PID parameters: {PID_PARAMS}")
+                logger.info(f"Saved PID parameters to {CONFIG['pid_config_file']}: {PID_PARAMS}")
     except Exception as e:
-        logger.error(f"Error saving PID parameters: {e}")
+        logger.error(f"Error saving PID parameters to {CONFIG['pid_config_file']}: {e}")
 
 # Route for the main dashboard
 @app.route('/')
@@ -551,9 +553,11 @@ def shutdown_server():
             # Stop CSV logging
             stop_csv_logging()
             
-            # Final save of parameters
+            # Final save of parameters to robot_config.json
             if os.path.exists(CONFIG['pid_config_file']):
-                save_pid_params()
+                with LOCK:
+                    with open(CONFIG['pid_config_file'], 'w') as f:
+                        json.dump(PID_PARAMS, f, indent=4)
                 
             # Clear any in-memory data that's no longer needed
             with LOCK:
@@ -642,7 +646,7 @@ def stop_server():
                 # Stop CSV logging
                 stop_csv_logging()
                 
-                # Final save of parameters
+                # Final save of parameters to robot_config.json
                 if os.path.exists(CONFIG['pid_config_file']):
                     with LOCK:
                         with open(CONFIG['pid_config_file'], 'w') as f:
@@ -674,6 +678,24 @@ def stop_server():
 # Check if server is running
 def is_server_running():
     return SERVER_STARTED
+
+# Backup the current parameters
+def save_parameters_backup():
+    """Save a backup of the current parameters"""
+    try:
+        with LOCK:
+            # Using robot_config.json as our configuration file (CONFIG['pid_config_file'])
+            if os.path.exists(CONFIG['pid_config_file']):
+                backup_file = f"backup_{int(time.time())}.json"
+                with open(backup_file, 'w') as f:
+                    json.dump(PID_PARAMS, f, indent=4)
+                logger.info(f"Saved parameter backup to {backup_file}")
+                return jsonify({"status": "success", "message": f"Backup saved to {backup_file}"})
+            else:
+                return jsonify({"status": "error", "message": "No parameters file found to backup"})
+    except Exception as e:
+        logger.error(f"Error saving parameter backup: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # If this file is run directly, start the server
 if __name__ == '__main__':

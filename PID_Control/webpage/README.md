@@ -102,4 +102,4 @@ The dashboard allows you to tune these PID parameters:
 - KD (Derivative Gain)
 - Target Angle
 
-All changes to parameters are automatically saved to a JSON file (`pid_config.json`) and will be reloaded when the server restarts. 
+All changes to parameters are automatically saved to a JSON file (`robot_config.json`) and will be reloaded when the server restarts. 
