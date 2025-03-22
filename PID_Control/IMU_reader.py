@@ -158,20 +158,34 @@ class IMUReader:
 
     def print_imu_data(self, delay=0.1):
         """
-        Continuously prints the IMU data for debugging.
+        Continuously prints the IMU data for debugging on a single updating line.
+        
+        Uses carriage return to update values in place without flooding the terminal.
 
-        :param delay: Time delay between readings (default: 0.1s).
+        Args:
+            delay: Time delay between readings (default: 0.1s).
         """
         try:
+            # Print initial information
             print(f"IMU Orientation: {'Upside Down' if self.MOUNTED_UPSIDE_DOWN else 'Normal'}")
             print(f"Accel Offsets: X={self.ACCEL_OFFSET_X}, Y={self.ACCEL_OFFSET_Y}, Z={self.ACCEL_OFFSET_Z}")
+            print("Press Ctrl+C to stop")
+            print("Reading data...", flush=True)
+            
+            # Main loop - update values on same line
             while True:
                 imu_data = self.get_imu_data()
-                print(f"Roll: {imu_data['roll']:.2f}° | "
-                      f"Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                # \r returns cursor to start of line, overwriting previous output
+                # end='' prevents adding a newline, flush=True ensures immediate display
+                print(f"\rRoll: {imu_data['roll']:+6.2f}° | Angular Velocity: {imu_data['angular_velocity']:+6.2f}°/s", end='', flush=True)
                 time.sleep(delay)
+                
         except KeyboardInterrupt:
+            # Print a newline to ensure next terminal output starts on a new line
             print("\nIMU Reader Stopped.")
+        finally:
+            # Ensure terminal returns to normal state
+            print("", flush=True)
 
 # Example usage
 if __name__ == "__main__":
