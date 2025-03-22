@@ -60,7 +60,7 @@ PID_PARAMS = {
     'I_GAIN': 0.1,
     'D_GAIN': 0.01,
     'IMU_FILTER_ALPHA': 0.2,
-    'SAMPLE_TIME': 10,
+    'SAMPLE_TIME': 10,  # Default value in milliseconds (represents 0.01 seconds)
     'target_angle': 0.0,
     'MOTOR_DEADBAND': 10,
     'MAX_MOTOR_SPEED': 100,
@@ -127,8 +127,14 @@ def load_pid_params():
             PID_PARAMS['D_GAIN'] = robot_config.get('D_GAIN', PID_PARAMS['D_GAIN'])
             PID_PARAMS['IMU_FILTER_ALPHA'] = robot_config.get('IMU_FILTER_ALPHA', PID_PARAMS['IMU_FILTER_ALPHA'])
             
-            # IMPORTANT: Don't multiply SAMPLE_TIME here - this was causing the large values
-            PID_PARAMS['SAMPLE_TIME'] = robot_config.get('SAMPLE_TIME', 10)
+            # Handle SAMPLE_TIME in seconds (convert to milliseconds for the web interface)
+            sample_time_seconds = robot_config.get('SAMPLE_TIME', 0.01)
+            # Ensure it's within reasonable bounds
+            if sample_time_seconds > 1.0:  # More than 1 second is likely an error
+                logger.warning(f"Sample time value suspiciously large ({sample_time_seconds}), defaulting to 0.01")
+                sample_time_seconds = 0.01
+            # Convert to milliseconds for the web interface (multiply by 1000)
+            PID_PARAMS['SAMPLE_TIME'] = sample_time_seconds * 1000
             
             PID_PARAMS['MOTOR_DEADBAND'] = robot_config.get('MOTOR_DEADBAND', PID_PARAMS['MOTOR_DEADBAND'])
             PID_PARAMS['MAX_MOTOR_SPEED'] = robot_config.get('MAX_MOTOR_SPEED', PID_PARAMS['MAX_MOTOR_SPEED'])
@@ -311,8 +317,8 @@ def update_pid_params():
                             return jsonify({"error": f"Parameter {key} cannot be negative"}), 400
                         elif key == 'alpha' and (value < 0.05 or value > 0.95):
                             return jsonify({"error": "Alpha must be between 0.05 and 0.95"}), 400
-                        elif key == 'sample_time' and (value < 5 or value > 20):
-                            return jsonify({"error": "Sample time must be between 5 and 20 milliseconds"}), 400
+                        elif key == 'sample_time' and (value < 1 or value > 50):
+                            return jsonify({"error": "Sample time must be between 1 and 50 milliseconds"}), 400
                         elif key == 'deadband' and (value < 0 or value > 60):
                             return jsonify({"error": "Deadband must be between 0 and 60"}), 400
                         elif key == 'max_speed' and (value < 60 or value > 100):

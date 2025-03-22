@@ -9,6 +9,7 @@ Key features:
 - Loads configuration from JSON file or creates default if none exists
 - Provides easy-to-use interface for updating and saving configuration
 - Defines default parameters for PID controller, motors, and IMU
+- Interactive parameter tuning through ParametersTuner class
 - Maintains backward compatibility with older code
 
 The configuration parameters are divided into several categories:
@@ -31,6 +32,12 @@ Example Usage:
     # Save updated configuration to file
     from config import save_config
     save_config(CONFIG)
+    
+    # Use interactive parameter tuner
+    from config import ParametersTuner
+    tuner = ParametersTuner()
+    tuner.tune_parameters()  # Tune all parameters
+    tuner.tune_specific_parameters(['P_GAIN', 'I_GAIN'])  # Tune specific parameters
 """
 
 import json
@@ -38,6 +45,15 @@ import os
 
 # File path for the configuration
 CONFIG_FILE = 'robot_config.json'
+
+# Set up hardware configuration for backward compatibility and convenience
+HARDWARE_CONFIG = {
+    # Hard-coded pin values - not tunable
+    'MOTOR_A_IN1_PIN': 12,
+    'MOTOR_A_IN2_PIN': 18,
+    'MOTOR_B_IN1_PIN': 13,
+    'MOTOR_B_IN2_PIN': 19,
+}
 
 # Default configuration for the self-balancing robot
 DEFAULT_CONFIG = {
@@ -63,9 +79,10 @@ DEFAULT_CONFIG = {
     'IMU_UPSIDE_DOWN': True,     # Set to True if IMU is mounted upside down
 }
 
+
 def load_config():
     """
-    Load configuration from file or create default if it doesn't exist.
+    Load configuration from robot_config.json file or create default if it doesn't exist.
     
     Returns:
         Configuration dictionary
@@ -85,6 +102,7 @@ def load_config():
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
 
+
 def save_config(config):
     """
     Save configuration to file.
@@ -99,19 +117,89 @@ def save_config(config):
     except IOError as e:
         print(f"⚠️ Error saving configuration: {e}")
 
+
 # Load the configuration
 CONFIG = load_config()
 
-# Set up hardware configuration for backward compatibility and convenience
-HARDWARE_CONFIG = {
-    # Hard-coded pin values - not tunable
-    'MOTOR_A_IN1_PIN': 12,
-    'MOTOR_A_IN2_PIN': 18,
-    'MOTOR_B_IN1_PIN': 13,
-    'MOTOR_B_IN2_PIN': 19,
- 
-}
 
-# For backward compatibility
-PID_CONFIG = CONFIG
+class ParametersTuner:
+    """
+    Interface for tuning PID parameters interactively.
+    """
+    
+    def __init__(self, config_dict=CONFIG):
+        """
+        Initialize PID tuner with a configuration dictionary.
+        
+        Args:
+            config_dict: Configuration dictionary to tune (defaults to global CONFIG)
+        """
+        self.config = config_dict
+    
+    def print_parameters(self):
+        """
+        Print all parameters in a readable format.
+        """
+        print("Current PID Parameters:")
+        print("-" * 40)
+        
+        # Display parameters in a more organized way
+        for key, value in self.config.items():
+            print(f"{key:20}: {value}")
+        
+        print("-" * 40)
+    
+    def tune_parameters(self):
+        """
+        Interactive tuning of PID parameters.
+        """
+        print("\nPID Tuning Mode")
+        self.print_parameters()
+        
+        # Update parameters
+        for key in self.config:
+            try:
+                # Print on a new line each time
+                print(f"{key}: ", end="")
+                new_value = input()
+                
+                if new_value:
+                    self.config[key] = float(new_value)
+            except ValueError:
+                print(f"Invalid value for {key}. Using current value.")
+                
+        # Save the updated configuration
+        save_config(self.config)
+        
+    def tune_specific_parameters(self, params_list):
+        """
+        Interactive tuning of specific parameters.
+        
+        Args:
+            params_list: List of parameter names to tune
+        """
+        # Print current parameters
+        print("\nQuick PID Tuning Mode")
+        print("Current Parameters:")
+        print("-" * 40)
+        for key in params_list:
+            print(f"{key}: {self.config[key]}")
+        print("-" * 40 + "\n")
+            
+        # Update parameters
+        for key in params_list:
+            try:
+                print(f"{key}: ", end="")
+                new_value = input()
+                
+                if new_value:
+                    self.config[key] = float(new_value)
+                    
+            except ValueError:
+                print(f"Invalid value for {key}. Using current value.")
+                
+        # Save the updated configuration
+        save_config(self.config)
+
+
 

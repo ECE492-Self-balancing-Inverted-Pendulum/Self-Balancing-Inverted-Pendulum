@@ -147,8 +147,12 @@ def runtime_parameter_tuning(pid_tuner, balance_controller):
         if 'alpha' in params:
             CONFIG['IMU_FILTER_ALPHA'] = params['alpha']
         if 'sample_time' in params:
-            # Don't convert - just use the value directly
-            CONFIG['SAMPLE_TIME'] = params['sample_time']
+            # Convert from milliseconds (web interface) to seconds (controller)
+            CONFIG['SAMPLE_TIME'] = params['sample_time'] / 1000.0
+            # Ensure it's within reasonable bounds
+            if CONFIG['SAMPLE_TIME'] > 1.0:  # More than 1 second is likely an error
+                print(f"Warning: Sample time value suspiciously large ({CONFIG['SAMPLE_TIME']}), defaulting to 0.01")
+                CONFIG['SAMPLE_TIME'] = 0.01
         if 'deadband' in params:
             CONFIG['MOTOR_DEADBAND'] = params['deadband']
         if 'max_speed' in params:
