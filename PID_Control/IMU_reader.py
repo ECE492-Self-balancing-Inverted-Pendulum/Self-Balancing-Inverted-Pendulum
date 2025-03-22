@@ -45,7 +45,7 @@ class IMUReader:
     ACCEL_OFFSET_Y = -0.14494018010253898
     ACCEL_OFFSET_Z = 0.46995493779295927
 
-    def __init__(self):
+    def __init__(self, upside_down=True):
         """
         Initializes the IMU sensor with settings from CONFIG.
         """
@@ -54,6 +54,7 @@ class IMUReader:
         
         # Try to initialize the IMU
         try:
+            # This line tries to initialize the IMU with the address 0x0c (one of the possible addresses)
             self.imu = adafruit_icm20x.ICM20948(self.i2c, address=0x0c)
             print("IMU initialized with address 0x0c")
         except ValueError:
@@ -62,14 +63,12 @@ class IMUReader:
                 print("IMU initialized with default address")
             except ValueError as e:
                 print(f"Error initializing IMU: {e}")
-                print("Try checking connections and I2C address (use i2cdetect -y 1)")
+                print("Try checking IMU connections and I2C address (use i2cdetect -y 1)")
                 raise
         
-        # Get settings from CONFIG
-        self.alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
-        self.upside_down = CONFIG.get('IMU_UPSIDE_DOWN', True)
+        # Set mounting orientation
+        self.MOUNTED_UPSIDE_DOWN = upside_down
         
-        print(f"IMU configured with alpha={self.alpha}, upside_down={self.upside_down}")
 
         # First reading (initialize with actual IMU position)
         self.roll, self.angular_velocity = self._get_initial_reading()
@@ -83,26 +82,18 @@ class IMUReader:
                  Higher = more responsive, Lower = smoother
         """
         if 0 < alpha < 1:
-            self.alpha = alpha
+            # Import here to ensure we get the most up-to-date CONFIG
+            from config import CONFIG, save_config
+            
+            # Only update the alpha value in the latest CONFIG
             CONFIG['IMU_FILTER_ALPHA'] = alpha
             save_config(CONFIG)
+            
             print(f"IMU filter alpha set to {alpha:.2f}")
             return True
         else:
             print(f"Invalid alpha value: {alpha}. Must be between 0 and 1.")
             return False
-
-    def set_orientation(self, upside_down):
-        """
-        Update the IMU orientation setting and save to CONFIG.
-        
-        Args:
-            upside_down: Whether the IMU is mounted upside-down
-        """
-        self.upside_down = upside_down
-        CONFIG['IMU_UPSIDE_DOWN'] = upside_down
-        save_config(CONFIG)
-        print(f"IMU orientation set to upside_down={upside_down}")
 
     def _get_initial_reading(self):
         """
@@ -112,7 +103,7 @@ class IMUReader:
             Initial roll and angular velocity values.
         """
         accel_x, accel_y, accel_z = self.imu.acceleration
-        gyro_x, gyro_y, gyro_z = self.imu.gyro
+        gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
 
         # Handle calibration offsets based on IMU orientation
         if self.upside_down:
@@ -126,61 +117,64 @@ class IMUReader:
         # Compute initial roll angle
         initial_roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
 
-        return initial_roll, gyro_x
+        return initial_roll, gyro_x  # Initialize angular velocity with X-axis rotation
 
     def get_imu_data(self):
         """
         Reads IMU data, applies calibration and filtering, and returns processed values.
-        
-        Returns:
-            A dictionary with roll and angular velocity.
+        Accounts for the IMU being mounted upside-down.
+
+        :return: A dictionary with roll and angular velocity.
         """
+        # Get alpha from config
+        self.ALPHA = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+        
         # Read raw IMU values
         accel_x, accel_y, accel_z = self.imu.acceleration
-        gyro_x, gyro_y, gyro_z = self.imu.gyro
+        gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
 
         # Handle calibration offsets based on IMU orientation
-        if self.upside_down:
+        if self.MOUNTED_UPSIDE_DOWN:
+            # For upside-down mounting, invert Y and Z axes
             accel_y = -accel_y - self.ACCEL_OFFSET_Y
             accel_z = -accel_z - self.ACCEL_OFFSET_Z
             gyro_x = -gyro_x
         else:
+            # Normal mounting - apply offsets normally
             accel_y -= self.ACCEL_OFFSET_Y
             accel_z -= self.ACCEL_OFFSET_Z
 
         # Compute roll angle from accelerometer (degrees)
         roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
 
-        # Apply low-pass filter to stabilize readings
-        self.roll = self.alpha * roll + (1 - self.alpha) * self.roll
-        self.angular_velocity = self.alpha * gyro_x + (1 - self.alpha) * self.angular_velocity
+        # Apply low-pass filter to stabilize roll readings
+        self.roll = self.ALPHA * roll + (1 - self.ALPHA) * self.roll
+        self.angular_velocity = self.ALPHA * gyro_x + (1 - self.ALPHA) * self.angular_velocity
 
         return {
             "roll": self.roll,
             "angular_velocity": self.angular_velocity
         }
 
-    def print_diagnostic_data(self, samples=10, delay=0.1):
+    def print_imu_data(self, delay=0.1):
         """
-        Prints diagnostic IMU data for a set number of samples.
-        
-        Args:
-            samples: Number of samples to collect and print
-            delay: Time delay between readings
+        Continuously prints the IMU data for debugging.
+
+        :param delay: Time delay between readings (default: 0.1s).
         """
-        print(f"IMU Diagnostic Data ({samples} samples):")
-        print(f"Alpha: {self.alpha}, Upside-down: {self.upside_down}")
-        print("-" * 50)
-        
-        for i in range(samples):
-            imu_data = self.get_imu_data()
-            print(f"{i+1}/{samples}: Roll: {imu_data['roll']:.2f}° | Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
-            time.sleep(delay)
-        
-        print("-" * 50)
+        try:
+            print(f"IMU Orientation: {'Upside Down' if self.MOUNTED_UPSIDE_DOWN else 'Normal'}")
+            print(f"Accel Offsets: X={self.ACCEL_OFFSET_X}, Y={self.ACCEL_OFFSET_Y}, Z={self.ACCEL_OFFSET_Z}")
+            while True:
+                imu_data = self.get_imu_data()
+                print(f"Roll: {imu_data['roll']:.2f}° | "
+                      f"Angular Velocity: {imu_data['angular_velocity']:.2f}°/s")
+                time.sleep(delay)
+        except KeyboardInterrupt:
+            print("\nIMU Reader Stopped.")
 
 # Example usage
 if __name__ == "__main__":
-    imu_reader = IMUReader()
-    imu_reader.print_diagnostic_data()
+    imu_reader = IMUReader(upside_down=True)
+    imu_reader.print_imu_data()
 
