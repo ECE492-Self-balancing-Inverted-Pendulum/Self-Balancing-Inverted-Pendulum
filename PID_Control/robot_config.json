@@ -5,6 +5,7 @@
     "IMU_FILTER_ALPHA": 0.3,
     "SAMPLE_TIME": 0.01,
     "target_angle": 0.0,
+    "MAX_I_TERM": 20,
     "MOTOR_DEADBAND": 60,
     "MAX_MOTOR_SPEED": 100,
     "ZERO_THRESHOLD": 0.1

@@ -4,25 +4,13 @@ Balance Controller Module for Self-Balancing Robot
 This module implements the main balance control logic for the self-balancing robot,
 connecting the IMU sensors, PID controller, and motor control components together.
 
-Key features:
-- Integrates data from IMU with PID control to determine motor output
-- Handles motor control including deadband and maximum speed limits
-- Implements safety features to prevent damage during excessive tilt
-- Provides real-time debug output of critical balancing parameters
-- Supports both single and dual motor configurations
-
-The balance controller is the central component that ties together all the robot's
-systems to achieve and maintain balance. It continuously reads sensor data, calculates
-the appropriate response using PID control, and applies that control to the motors.
-
 Example Usage:
-    # Initialize components
     from IMU_reader import IMUReader
     from motorController import DualMotorControl
     from config import CONFIG, HARDWARE_CONFIG
     
     # Create required components
-    imu = IMUReader(alpha=CONFIG['IMU_FILTER_ALPHA'], upside_down=CONFIG['IMU_UPSIDE_DOWN'])
+    imu = IMUReader()
     motors = DualMotorControl(
         motor_a_in1=HARDWARE_CONFIG['MOTOR_A_IN1_PIN'],
         motor_a_in2=HARDWARE_CONFIG['MOTOR_A_IN2_PIN'],
@@ -31,7 +19,7 @@ Example Usage:
     )
     
     # Create balance controller
-    controller = BalanceController(imu, motors, CONFIG)
+    controller = BalanceController(imu, motors)
     
     # Start balancing
     controller.start_balancing()
@@ -41,118 +29,51 @@ Example Usage:
 """
 
 import time
-import sys
-import select
-import termios
-import tty
 from pid_controller import PIDController
 from motorController import MotorControl, DualMotorControl
+from config import load_config
 
 class BalanceController:
     """
     Main controller for the self-balancing robot.
     
     This class coordinates between the IMU, motor control, and PID controller to maintain balance.
-    
-    Attributes:
-        imu: IMU reader instance
-        motor: Motor control instance
-        pid: PID controller instance
-        sample_time: Loop timing in seconds
-        last_direction: Last motor direction for boost logic
-        enable_debug: Whether to print debug information
-        running: Whether the balancing loop is currently running
     """
     
-    def __init__(self, imu, motor, config):
+    def __init__(self, imu, motor):
         """
-        Initialize the balance controller with an IMU and motor control.
+        Initialize the balance controller with IMU and motor control.
         
         Args:
             imu: IMU reader instance
-            motor: Motor control instance
-            config: Configuration dictionary
+            motor: Motor control instance (single or dual)
         """
         self.imu = imu
         self.motor = motor
-        self.config = config
-        
-        # Ensure config has all required keys with consistent naming
-        # Add default values if keys are missing to prevent KeyError
-        if 'P_GAIN' not in config:
-            print("Warning: P_GAIN not found in config, using default value 5.0")
-            config['P_GAIN'] = 5.0
-            
-        if 'I_GAIN' not in config:
-            print("Warning: I_GAIN not found in config, using default value 0.1")
-            config['I_GAIN'] = 0.1
-            
-        if 'D_GAIN' not in config:
-            print("Warning: D_GAIN not found in config, using default value 1.0")
-            config['D_GAIN'] = 1.0
-            
-        if 'SAMPLE_TIME' not in config:
-            print("Warning: SAMPLE_TIME not found in config, using default value 0.01")
-            config['SAMPLE_TIME'] = 0.01
-            
-        # Initialize PID controller
-        self.pid = PIDController(config)
-        
-        # Store sample time from config, can be updated at runtime
-        self.sample_time = config['SAMPLE_TIME']
-        
-        # For direction change boosting
-        self.last_direction = None
-        self.enable_debug = True  # Enable debug output by default
+        self.pid = PIDController()
         self.running = False
         
         # Determine if we're using dual motors
         self.using_dual_motors = isinstance(self.motor, DualMotorControl)
-        if self.using_dual_motors:
-            print("Balance controller configured with dual motors")
-        else:
-            print("Balance controller configured with single motor")
+        print(f"Balance controller configured with {'dual' if self.using_dual_motors else 'single'} motor")
     
-    def _apply_direction_change_boost(self, output):
-        """
-        Apply a boost when direction changes to overcome inertia.
-        
-        Args:
-            output (float): Original PID output
-            
-        Returns:
-            float: Modified output with boost if direction changed
-        """
-        # Determine current direction
-        current_direction = "stop" if abs(output) < 0.1 else ("clockwise" if output > 0 else "counterclockwise")
-        
-        # Skip boost if output is very small
-        if current_direction == "stop":
-            self.last_direction = None
-            return output
-            
-        # Apply boost on direction change if configured
-        boost_amount = self.config.get('DIRECTION_CHANGE_BOOST', 0)
-        if boost_amount > 0 and self.last_direction is not None and current_direction != self.last_direction:
-            # Direction has changed, apply boost
-            output = output * (1 + boost_amount)
-        
-        # Store current direction for next iteration
-        self.last_direction = current_direction
-        
-        return output
-        
     def apply_motor_control(self, output):
         """
-        Apply the control output to the motors.
+        Apply the control output to the motors with deadband handling.
         
         Args:
-            output (float): PID controller output (-100 to 100)
+            output: PID controller output (-100 to 100)
+            
+        Returns:
+            tuple: (final_output, speed, direction)
         """
-        # Get parameters from config
-        deadband = self.config.get('MOTOR_DEADBAND', 0)
-        max_speed = self.config.get('MAX_MOTOR_SPEED', 100)
-        zero_threshold = self.config.get('ZERO_THRESHOLD', 0.1)  # Get threshold from config
+        # Get latest config each time
+        config = load_config()
+        
+        # Get motor parameters from config
+        deadband = config.get('MOTOR_DEADBAND', 0)
+        max_speed = config.get('MAX_MOTOR_SPEED', 100)
+        zero_threshold = config.get('ZERO_THRESHOLD', 0.1)
         
         # Clamp output between -100 and 100
         output = max(-100, min(100, output))
@@ -163,21 +84,21 @@ class BalanceController:
         else:
             direction = "counterclockwise"
         
-        # Set the motor speed (absolute value of output)
+        # Get absolute speed value
         speed = abs(output)
         
-        # Apply deadband mapping logic
-        if speed < zero_threshold:  # Use configurable threshold instead of hardcoded value
+        # Apply zero threshold
+        if speed < zero_threshold:
             speed = 0
+        # Apply deadband mapping
         elif deadband > 0:
             # Map the speed from [0-100] to [deadband-max_speed]
-            # Formula: new_speed = (speed / 100) * (max_speed - deadband) + deadband
             speed = (speed / 100.0) * (max_speed - deadband) + deadband
         
         # Ensure speed is within limits
         speed = min(max(0, speed), max_speed)
         
-        # Apply to motors using the motor driver
+        # Apply to motors
         if self.using_dual_motors:
             self.motor.set_motors_speed(speed, direction)
         else:
@@ -192,48 +113,35 @@ class BalanceController:
         Args:
             debug_callback: Optional callback function for debug output
         """
-        # Only print terminal output if not in web dashboard mode
-        is_web_mode = debug_callback is not None
-        
-        if not is_web_mode:
-            print("\nSelf-Balancing Mode Started!")
-            print("Press 'Q' to return to main menu")
-            print("-------------------------")
+        print("\nSelf-Balancing Mode Started!")
+        print("Use Ctrl+C to stop balancing")
+        print("-------------------------")
         
         # Reset PID controller
         self.pid.reset()
-        self.last_direction = None
         
-        # Set up non-blocking input detection
+        # Set running flag
         self.running = True
         
-        # Configure terminal for non-blocking input
         try:
-            # Set up terminal for non-blocking input this will allow us to check for key presses without having to press enter
-            tty.setcbreak(sys.stdin.fileno())
-            
-            # Track timing for main control loop
+            # Initialize timing variables
             last_time = time.time()
-            last_debug_time = time.time()
-            last_print_time = time.time()  # For throttling terminal output
+            last_print_time = time.time()
+            last_debug_time = time.time()  # Initialize this for debug callback
             
             # Main control loop
             while self.running:
-                # Check for keypress
-                if select.select([sys.stdin], [], [], 0)[0]:
-                    key = sys.stdin.read(1)
-                    
-                    if key.lower() == 'q':
-                        if not is_web_mode:
-                            print("\nStopping self-balancing mode...")
-                        break
-                
                 # Calculate time since last loop
                 current_time = time.time()
                 time_passed = current_time - last_time
                 
+                # Get latest sample time from config
+                config = load_config()
+                sample_time = config.get('SAMPLE_TIME', 0.01)
+                
                 # Ensure we're running at the correct sample rate
-                if time_passed < self.sample_time:
+                if time_passed < sample_time:
+                    time.sleep(0.001)  # Small sleep to prevent CPU hogging
                     continue
                 
                 # Get IMU data
@@ -241,15 +149,11 @@ class BalanceController:
                 roll = imu_data['roll']
                 angular_velocity = imu_data['angular_velocity']
                 
-                # Calculate PID output using compute() instead of calculate()
+                # Calculate PID output
                 output = self.pid.compute(
                     current_value=roll,
-                    angular_velocity=angular_velocity,
                     dt=time_passed
                 )
-                
-                # Apply direction change boost if configured
-                output = self._apply_direction_change_boost(output)
                 
                 # Apply the output to the motor(s)
                 result = self.apply_motor_control(output)
@@ -258,35 +162,40 @@ class BalanceController:
                 # Update for next iteration
                 last_time = current_time
                 
-                # Print status to terminal only if not in web mode and at a sensible rate (every 0.5 sec)
-                if not is_web_mode and current_time - last_print_time >= 0.5:
-                    print(f"Roll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}")
+                # Print status on same line (throttled to 2Hz)
+                if current_time - last_print_time >= 0.5:
+                    print(f"\rRoll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}", end='', flush=True)
                     last_print_time = current_time
                 
-                # Optional debug callback for data visualization or logging
-                if debug_callback and current_time - last_debug_time >= 0.1:  # Limit debug to 10Hz
+                # Optional debug callback (throttled to 10Hz)
+                if debug_callback and current_time - last_debug_time >= 0.1:
+                    # Get PID terms directly from config instead of relying on internal PID state
+                    config = load_config()
                     debug_info = {
                         'roll': roll,
                         'angular_velocity': angular_velocity,
                         'output': output,
                         'motor_output': motor_speed,
                         'pid': {
-                            'p_term': self.pid.p_term,
-                            'i_term': self.pid.i_term,
-                            'd_term': self.pid.d_term
+                            'p_gain': config.get('P_GAIN', 0),
+                            'i_gain': config.get('I_GAIN', 0),
+                            'd_gain': config.get('D_GAIN', 0)
                         }
                     }
                     debug_callback(debug_info)
                     last_debug_time = current_time
                 
+        except KeyboardInterrupt:
+            print("\nBalancing stopped by user (Ctrl+C)")
         except Exception as e:
-            # Print error
-            print(f"Error in balancing loop: {e}")
+            print(f"\nError in balancing loop: {e}")
         finally:
             # Make sure motors are stopped
-            self.motor.stop_motors() if self.using_dual_motors else self.motor.stop_motor()
-            if not is_web_mode:
-                print("\nSelf-balancing mode stopped.")
+            if self.using_dual_motors:
+                self.motor.stop_motors()
+            else:
+                self.motor.stop_motor()
+            print("\nSelf-balancing mode stopped.")
     
     def stop_balancing(self):
         """Stop the balancing control loop."""
@@ -295,32 +204,4 @@ class BalanceController:
             self.motor.stop_motors()
         else:
             self.motor.stop_motor()
-        print("Motor stopped. Balance mode exited.")
-
-    def update_from_config(self, config=None):
-        """
-        Update controller parameters from config file.
-        
-        Args:
-            config: Optional config dict. If None, reloads from file.
-        """
-        from config import CONFIG, load_config
-        
-        # If no config provided, reload from file
-        if config is None:
-            load_config()
-            config = CONFIG
-        
-        # Update PID parameters
-        self.pid.kp = config.get('P_GAIN', self.pid.kp)
-        self.pid.ki = config.get('I_GAIN', self.pid.ki)
-        self.pid.kd = config.get('D_GAIN', self.pid.kd)
-        
-        # Update other controller settings
-        self.sample_time = config.get('SAMPLE_TIME', self.sample_time)
-        
-        # Update IMU if we have access to it
-        if hasattr(self, 'imu') and self.imu:
-            self.imu.ALPHA = config.get('IMU_FILTER_ALPHA', self.imu.ALPHA)
-        
-        return True 
+        print("\nMotor stopped. Balance mode exited.")

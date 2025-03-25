@@ -1,4 +1,15 @@
 
+    # This file contains utility functions for the robot
+    
+    # TODO:
+    # - Add a function to calibrate the IMU live 
+    # - Add a function to test the motors users should be able
+    #   to press a button and have the robot move forward or backward (w and s)
+    #   and also have the ability to specify a speed from 0-100% to test the motors
+ 
+    
+    
+    
     def imu_tuning_mode(self):
         """
         Interactive mode for tuning IMU responsiveness.
