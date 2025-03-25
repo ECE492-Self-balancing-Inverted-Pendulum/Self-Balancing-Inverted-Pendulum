@@ -73,6 +73,8 @@ class IMUReader:
         # First reading (initialize with actual IMU position)
         self.roll, self.angular_velocity = self._get_initial_reading()
         
+        
+        
     def set_alpha(self, alpha):
         """
         Update the low-pass filter alpha value and save to CONFIG.
@@ -104,9 +106,12 @@ class IMUReader:
         """
         accel_x, accel_y, accel_z = self.imu.acceleration
         gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
+        
+        # Get the upside down value from the config
+        upside_down = CONFIG.get('IMU_UPSIDE_DOWN', True)
 
         # Handle calibration offsets based on IMU orientation
-        if self.upside_down:
+        if upside_down:
             accel_y = -accel_y - self.ACCEL_OFFSET_Y
             accel_z = -accel_z - self.ACCEL_OFFSET_Z
             gyro_x = -gyro_x
