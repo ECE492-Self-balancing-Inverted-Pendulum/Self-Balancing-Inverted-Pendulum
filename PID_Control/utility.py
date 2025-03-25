@@ -10,6 +10,10 @@ Functions:
 """
 
 import time
+import sys
+import termios
+import tty
+import select
 from config import CONFIG, save_config
 
 def imu_tuning_mode(imu):
@@ -51,34 +55,38 @@ def imu_tuning_mode(imu):
     print("q: Exit IMU tuning mode")
     print("\nPress any key at any time to use a command.")
     
-    running = True
-    
-    while running:
-        # Get IMU data
-        imu_data = imu.get_imu_data()
-        roll = imu_data['roll']
-        angular_velocity = imu_data['angular_velocity']
+    # Save terminal settings to restore later
+    old_settings = termios.tcgetattr(sys.stdin)
+    try:
+        # Set terminal to raw mode
+        tty.setraw(sys.stdin.fileno())
         
-        # Print data on the same line using \r
-        print(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {imu.ALPHA:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}", end='', flush=True)
-        
-        # Small delay to prevent flooding the terminal
-        time.sleep(0.1)
-        
-        # Check for keypress - simple non-blocking approach
-        try:
-            # Wait for very short time for key input
-            user_input = input_with_timeout(0.1)
+        running = True
+        while running:
+            # Get IMU data
+            imu_data = imu.get_imu_data()
+            roll = imu_data['roll']
+            angular_velocity = imu_data['angular_velocity']
             
-            if user_input:
+            # Print data on the same line using \r
+            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {imu.ALPHA:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+            sys.stdout.flush()
+            
+            # Check if there's any input without blocking
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                # Read a single character
+                user_input = sys.stdin.read(1)
+                
                 if user_input == 'q':
-                    print("\nExiting IMU tuning mode.")
+                    sys.stdout.write("\nExiting IMU tuning mode.")
+                    sys.stdout.flush()
                     running = False
                 
                 elif user_input == '+':
                     new_alpha = min(imu.ALPHA + 0.05, 0.95)
                     imu.set_alpha(new_alpha)
-                    print(f"\nIncreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.write(f"\nIncreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.flush()
                     
                     # Update the config
                     CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
@@ -87,7 +95,8 @@ def imu_tuning_mode(imu):
                 elif user_input == '-':
                     new_alpha = max(imu.ALPHA - 0.05, 0.05)
                     imu.set_alpha(new_alpha)
-                    print(f"\nDecreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.write(f"\nDecreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.flush()
                     
                     # Update the config
                     CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
@@ -96,7 +105,8 @@ def imu_tuning_mode(imu):
                 elif user_input == 'r':
                     default_alpha = 0.2  # Default alpha value
                     imu.set_alpha(default_alpha)
-                    print(f"\nReset alpha to default ({default_alpha:.2f})")
+                    sys.stdout.write(f"\nReset alpha to default ({default_alpha:.2f})")
+                    sys.stdout.flush()
                     
                     # Update the config
                     CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
@@ -105,20 +115,32 @@ def imu_tuning_mode(imu):
                 elif user_input == 't':
                     # Toggle the upside-down setting
                     imu.MOUNTED_UPSIDE_DOWN = not imu.MOUNTED_UPSIDE_DOWN
-                    print(f"\nToggled IMU orientation. Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+                    sys.stdout.write(f"\nToggled IMU orientation. Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+                    sys.stdout.flush()
                     
                     # Update the config
                     CONFIG['IMU_UPSIDE_DOWN'] = imu.MOUNTED_UPSIDE_DOWN
                     save_config(CONFIG)
                 
                 elif user_input == 'd':
-                    print(f"\nCurrent settings: Alpha: {imu.ALPHA:.2f}, Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
-        
-        except KeyboardInterrupt:
-            print("\nIMU tuning mode interrupted.")
-            running = False
+                    sys.stdout.write(f"\nCurrent settings: Alpha: {imu.ALPHA:.2f}, Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+                    sys.stdout.flush()
+                
+                # Clear line after key press
+                time.sleep(0.5)
+                
+            else:
+                # Small delay if no input
+                time.sleep(0.05)
     
-    print("\nIMU tuning mode exited.")
+    except KeyboardInterrupt:
+        sys.stdout.write("\nIMU tuning mode interrupted.")
+        sys.stdout.flush()
+    
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        print("\nIMU tuning mode exited.")
 
 
 def motor_test_mode(motor):
@@ -154,7 +176,6 @@ def motor_test_mode(motor):
     print("q: Exit motor test mode")
     
     # Check if we're using dual motors
-    import inspect
     has_dual_motors = hasattr(motor, 'set_motors_speed')
     
     # Current speed and direction
@@ -164,90 +185,86 @@ def motor_test_mode(motor):
     running = True
     
     while running:
-        # Print current status
-        print(f"\rMotor Status: {current_speed}% {current_direction}", end='', flush=True)
-        
-        # Check for keypress
+        # Simple input method without threading
+        print("\nEnter command [w/s/p/space/q]: ", end='', flush=True)
         try:
-            user_input = input_with_timeout(0.1)
+            user_input = input().lower()
             
-            if user_input:
-                if user_input == 'q':
-                    print("\nExiting motor test mode.")
-                    running = False
-                    # Stop motors before exiting
-                    if has_dual_motors:
-                        motor.stop_motors()
+            if user_input == 'q':
+                running = False
+                # Stop motors before exiting
+                if has_dual_motors:
+                    motor.stop_motors()
+                else:
+                    motor.stop_motor()
+            
+            elif user_input == 'w':
+                # Move forward at 100% speed
+                current_speed = 100
+                current_direction = "clockwise"
+                if has_dual_motors:
+                    motor.set_motors_speed(current_speed, current_direction)
+                else:
+                    motor.set_motor_speed(current_speed, current_direction)
+                print("Moving forward")
+            
+            elif user_input == 's':
+                # Move backward at 100% speed
+                current_speed = 100
+                current_direction = "counterclockwise"
+                if has_dual_motors:
+                    motor.set_motors_speed(current_speed, current_direction)
+                else:
+                    motor.set_motor_speed(current_speed, current_direction)
+                print("Moving backward")
+            
+            elif user_input == ' ' or user_input == '':  # Space key or Enter
+                # Stop motors
+                current_speed = 0
+                current_direction = "stop"
+                if has_dual_motors:
+                    motor.stop_motors()
+                else:
+                    motor.stop_motor()
+                print("Motors stopped")
+            
+            elif user_input == 'p':
+                # Prompt for custom PWM value
+                print("Enter PWM value (-100 to 100): ", end='', flush=True)
+                try:
+                    pwm_input = input().strip()
+                    pwm_value = float(pwm_input)
+                    
+                    # Ensure value is within bounds
+                    pwm_value = max(-100, min(100, pwm_value))
+                    
+                    # Set direction based on PWM value
+                    if pwm_value > 0:
+                        current_direction = "clockwise"
+                        current_speed = pwm_value
+                    elif pwm_value < 0:
+                        current_direction = "counterclockwise"
+                        current_speed = abs(pwm_value)
                     else:
-                        motor.stop_motor()
-                
-                elif user_input == 'w':
-                    # Move forward at 100% speed
-                    current_speed = 100
-                    current_direction = "clockwise"
-                    if has_dual_motors:
-                        motor.set_motors_speed(current_speed, current_direction)
-                    else:
-                        motor.set_motor_speed(current_speed, current_direction)
-                    print(f"\nMoving forward at {current_speed}% speed")
-                
-                elif user_input == 's':
-                    # Move backward at 100% speed
-                    current_speed = 100
-                    current_direction = "counterclockwise"
-                    if has_dual_motors:
-                        motor.set_motors_speed(current_speed, current_direction)
-                    else:
-                        motor.set_motor_speed(current_speed, current_direction)
-                    print(f"\nMoving backward at {current_speed}% speed")
-                
-                elif user_input == ' ':  # Space key
-                    # Stop motors
-                    current_speed = 0
-                    current_direction = "stop"
-                    if has_dual_motors:
-                        motor.stop_motors()
-                    else:
-                        motor.stop_motor()
-                    print("\nMotors stopped")
-                
-                elif user_input == 'p':
-                    # Prompt for custom PWM value
-                    print("\nEnter PWM value (-100 to 100): ", end='', flush=True)
-                    try:
-                        pwm_input = input().strip()
-                        pwm_value = float(pwm_input)
-                        
-                        # Ensure value is within bounds
-                        pwm_value = max(-100, min(100, pwm_value))
-                        
-                        # Set direction based on PWM value
-                        if pwm_value > 0:
-                            current_direction = "clockwise"
-                            current_speed = pwm_value
-                        elif pwm_value < 0:
-                            current_direction = "counterclockwise"
-                            current_speed = abs(pwm_value)
+                        current_direction = "stop"
+                        current_speed = 0
+                    
+                    # Apply to motors
+                    if current_direction == "stop":
+                        if has_dual_motors:
+                            motor.stop_motors()
                         else:
-                            current_direction = "stop"
-                            current_speed = 0
-                        
-                        # Apply to motors
-                        if current_direction == "stop":
-                            if has_dual_motors:
-                                motor.stop_motors()
-                            else:
-                                motor.stop_motor()
+                            motor.stop_motor()
+                    else:
+                        if has_dual_motors:
+                            motor.set_motors_speed(current_speed, current_direction)
                         else:
-                            if has_dual_motors:
-                                motor.set_motors_speed(current_speed, current_direction)
-                            else:
-                                motor.set_motor_speed(current_speed, current_direction)
-                        
-                        print(f"\nSet motors to {current_speed}% {current_direction}")
-                    except ValueError:
-                        print("\nInvalid input. Please enter a number between -100 and 100.")
-                
+                            motor.set_motor_speed(current_speed, current_direction)
+                    
+                    print("PWM value applied")
+                except ValueError:
+                    print("Invalid input. Please enter a number between -100 and 100.")
+            
         except KeyboardInterrupt:
             print("\nMotor test mode interrupted.")
             running = False
@@ -262,41 +279,4 @@ def motor_test_mode(motor):
         motor.stop_motors()
     else:
         motor.stop_motor()
-    print("\nMotor test mode exited. Motors stopped.")
-
-
-def input_with_timeout(timeout):
-    """
-    Simple non-blocking input function that returns None if no input is available.
-    This avoids using termios/tty while still allowing checking for keypresses.
-    
-    Args:
-        timeout: Time to wait for input in seconds
-    
-    Returns:
-        User input or None if no input available
-    """
-    import threading
-    import queue
-    
-    input_queue = queue.Queue()
-    
-    def input_thread():
-        try:
-            text = input()
-            input_queue.put(text)
-        except:
-            input_queue.put(None)
-    
-    # Start the input thread
-    thread = threading.Thread(target=input_thread)
-    thread.daemon = True
-    thread.start()
-    
-    # Wait for specified timeout
-    thread.join(timeout)
-    
-    # Check if we got input
-    if not input_queue.empty():
-        return input_queue.get()
-    return None
+    print("Motor test mode exited. Motors stopped.")
