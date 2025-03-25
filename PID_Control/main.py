@@ -36,10 +36,7 @@ def main():
     """
     # Initialize IMU with configuration from CONFIG
     # This compensates for the orientation of the IMU (upside-down or normal)
-    imu = IMUReader(
-        alpha=CONFIG.get('IMU_FILTER_ALPHA', 0.2),
-        upside_down=CONFIG.get('IMU_UPSIDE_DOWN', True)
-    )
+    imu = IMUReader()
     
     # Initialize motor control - Using DualMotorControl for both motors
     motors = DualMotorControl(
