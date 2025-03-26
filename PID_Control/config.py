@@ -91,7 +91,6 @@ def load_config():
         try:
             with open(CONFIG_FILE, 'r') as file:
                 config = json.load(file)
-                print(f"✅ Configuration loaded from {CONFIG_FILE}")
                 return config
         except (json.JSONDecodeError, IOError) as e:
             print(f"⚠️ Error loading configuration: {e}")

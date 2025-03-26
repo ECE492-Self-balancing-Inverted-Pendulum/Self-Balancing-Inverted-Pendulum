@@ -43,7 +43,11 @@ def imu_tuning_mode(imu):
     print("------------------")
     print("This mode allows you to adjust the IMU filter settings")
     print("to find the right balance between responsiveness and stability.")
-    print("\nCurrent alpha value:", imu.ALPHA)
+    
+    # Get current alpha value from CONFIG directly
+    current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+    
+    print("\nCurrent alpha value:", current_alpha)
     print("Higher alpha = more responsive but noisier")
     print("Lower alpha = smoother but slower to respond")
     print("\nCommands:")
@@ -63,13 +67,16 @@ def imu_tuning_mode(imu):
         
         running = True
         while running:
-            # Get IMU data
+            # Get IMU data - this also updates the ALPHA value inside IMU
             imu_data = imu.get_imu_data()
             roll = imu_data['roll']
             angular_velocity = imu_data['angular_velocity']
             
+            # Get current alpha value directly from CONFIG
+            current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+            
             # Print data on the same line using \r
-            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {imu.ALPHA:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
             sys.stdout.flush()
             
             # Check if there's any input without blocking
@@ -83,23 +90,23 @@ def imu_tuning_mode(imu):
                     running = False
                 
                 elif user_input == '+':
-                    new_alpha = min(imu.ALPHA + 0.05, 0.95)
+                    new_alpha = min(current_alpha + 0.05, 0.95)
                     imu.set_alpha(new_alpha)
-                    sys.stdout.write(f"\nIncreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.write(f"\nIncreased alpha to {new_alpha:.2f}")
                     sys.stdout.flush()
                     
                     # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    CONFIG['IMU_FILTER_ALPHA'] = new_alpha
                     save_config(CONFIG)
                 
                 elif user_input == '-':
-                    new_alpha = max(imu.ALPHA - 0.05, 0.05)
+                    new_alpha = max(current_alpha - 0.05, 0.05)
                     imu.set_alpha(new_alpha)
-                    sys.stdout.write(f"\nDecreased alpha to {imu.ALPHA:.2f}")
+                    sys.stdout.write(f"\nDecreased alpha to {new_alpha:.2f}")
                     sys.stdout.flush()
                     
                     # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    CONFIG['IMU_FILTER_ALPHA'] = new_alpha
                     save_config(CONFIG)
                 
                 elif user_input == 'r':
@@ -109,7 +116,7 @@ def imu_tuning_mode(imu):
                     sys.stdout.flush()
                     
                     # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = imu.ALPHA
+                    CONFIG['IMU_FILTER_ALPHA'] = default_alpha
                     save_config(CONFIG)
                 
                 elif user_input == 't':
@@ -123,7 +130,8 @@ def imu_tuning_mode(imu):
                     save_config(CONFIG)
                 
                 elif user_input == 'd':
-                    sys.stdout.write(f"\nCurrent settings: Alpha: {imu.ALPHA:.2f}, Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+                    current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+                    sys.stdout.write(f"\nCurrent settings: Alpha: {current_alpha:.2f}, Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
                     sys.stdout.flush()
                 
                 # Clear line after key press
