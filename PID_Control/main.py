@@ -11,6 +11,7 @@ Features:
 - Self-balancing with real-time parameter tuning
 - IMU diagnostics and tuning
 - Motor testing
+- Web dashboard for visualization
 
 Usage:
     Simply run this file to start the application:
@@ -21,6 +22,7 @@ Usage:
 
 # Standard library imports
 import time
+import socket
 
 # Component imports
 from motorController import DualMotorControl
@@ -29,6 +31,49 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from utility import imu_tuning_mode, motor_test_mode
+
+# Import web dashboard functions
+import web_dashboard
+
+def get_local_ip():
+    """Get local IP address for displaying web address."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "localhost"
+
+def web_dashboard_mode(balance_controller):
+    """
+    Run the self-balancing mode with web dashboard.
+    
+    Args:
+        balance_controller: Balance controller instance
+    """
+    # Start the web server
+    ip_address = get_local_ip()
+    port = 8080
+    web_dashboard.start_server(host='0.0.0.0', port=port)
+    print(f"\nWeb dashboard available at: http://{ip_address}:{port}")
+    print("Press Ctrl+C to stop balancing and return to menu")
+    
+    # Define a callback function for real-time data updates
+    def dashboard_callback(debug_info):
+        roll = debug_info['roll']
+        output = debug_info['output']
+        web_dashboard.update_angle_data(roll, output)
+    
+    try:
+        # Start balancing with the dashboard callback
+        balance_controller.start_balancing(debug_callback=dashboard_callback)
+    except KeyboardInterrupt:
+        print("\nWeb dashboard mode interrupted by user")
+    finally:
+        # Stop the web server
+        web_dashboard.stop_server()
 
 def main():
     """
@@ -61,6 +106,7 @@ def main():
         print("3. Full Parameter Tuning")
         print("4. Quick PID Tuning")
         print("5. IMU Tuning Mode")
+        print("6. Self-balancing Mode with Web Dashboard")
         print("Q. Quit Program")
     
     # Print menu the first time
@@ -68,7 +114,7 @@ def main():
     
     try:
         while True:
-            print("\nEnter choice [1-5, q]: ", end='', flush=True)
+            print("\nEnter choice [1-6, q]: ", end='', flush=True)
             choice = input().lower()
             
             if choice == '1':
@@ -101,6 +147,12 @@ def main():
             elif choice == '5':
                 # Call the imu_tuning_mode from utility module
                 imu_tuning_mode(imu)
+                # Reprint menu after returning from submenu
+                print_menu()
+                
+            elif choice == '6':
+                # Start the self-balancing mode with web dashboard
+                web_dashboard_mode(balance_controller)
                 # Reprint menu after returning from submenu
                 print_menu()
                 
