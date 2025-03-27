@@ -39,11 +39,11 @@ ahrs = imufusion.Ahrs()
 # Set Madgwick filter parameters (Lower gain for smoother response)
 ahrs.settings = imufusion.Settings(
     imufusion.CONVENTION_NWU,  # North-West-Up (NWU) convention
-    0.2,  # **Reduced gain for better stability**
+    0.7,  # **Reduced gain for better stability**
     2000,  # Gyroscope range (deg/s)
     10,  # Acceleration rejection threshold
     10,  # Magnetic rejection threshold
-    5 * SAMPLE_RATE,  # Recovery trigger period = 5 seconds
+    1 * SAMPLE_RATE,  # Recovery trigger period = 5 seconds
 )
 
 # Time tracking
@@ -76,7 +76,11 @@ try:
         prev_time = curr_time
 
         # Apply Madgwick filter
-        ahrs.update(gyro, accel, mag, dt)
+        # ahrs.update(gyro, accel, None, dt)
+
+        # Apply Madgwick filter with no magnetometer
+        ahrs.update_no_magnetometer(gyro, accel, dt)
+
 
         # Get Euler angles (Roll, Pitch, Yaw)
         euler = ahrs.quaternion.to_euler()
