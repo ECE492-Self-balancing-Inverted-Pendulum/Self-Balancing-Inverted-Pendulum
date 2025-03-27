@@ -11,7 +11,7 @@ import os
 import json
 import threading
 import time
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 from flask_socketio import SocketIO
 from config import CONFIG, load_config
 
@@ -41,6 +41,8 @@ HTML_TEMPLATE = """
     <title>PID Controller Dashboard</title>
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -69,10 +71,29 @@ HTML_TEMPLATE = """
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             padding: 15px;
             margin-bottom: 20px;
+            max-height: 400px; /* Control the height of the chart */
+            width: 90%; /* Make chart smaller */
+            margin: 0 auto 20px auto; /* Center the chart */
         }
         h2 {
             color: #555;
             margin-top: 0;
+        }
+        .chart-controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            margin: 0 5px;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
         }
     </style>
 </head>
@@ -84,6 +105,10 @@ HTML_TEMPLATE = """
     <div class="chart-container">
         <h2>Angle Data</h2>
         <canvas id="angleChart"></canvas>
+    </div>
+    
+    <div class="chart-controls">
+        <button id="reset-zoom">Reset Zoom</button>
     </div>
     
     <script>
@@ -137,6 +162,7 @@ HTML_TEMPLATE = """
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     x: {
                         title: {
@@ -153,8 +179,30 @@ HTML_TEMPLATE = """
                 },
                 animation: {
                     duration: 0
+                },
+                plugins: {
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy'
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy'
+                        }
+                    }
                 }
             }
+        });
+        
+        // Reset zoom button
+        document.getElementById('reset-zoom').addEventListener('click', function() {
+            angleChart.resetZoom();
         });
         
         // Handle incoming data
@@ -175,8 +223,11 @@ HTML_TEMPLATE = """
             }
             
             // Update chart
-            angleChart.update();
+            angleChart.update('none'); // Use 'none' to disable animations for smoother updates
         });
+        
+        // Send a message to request any available data immediately
+        socket.emit('request_initial_data');
     </script>
 </body>
 </html>
@@ -187,19 +238,47 @@ def index():
     """Render the dashboard page."""
     return render_template_string(HTML_TEMPLATE)
 
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection."""
+    # Send current data to newly connected client
+    socketio.emit('update_data', latest_data, to=request.sid)
+
+@socketio.on('request_initial_data')
+def handle_initial_data_request():
+    """Send initial data when requested by client."""
+    socketio.emit('update_data', latest_data)
+
 def send_data():
     """Send data to clients periodically."""
     global server_running
+    print("Starting data broadcast thread...")
+    
+    # Send at least one data point even if there are no updates yet
+    initial_data = latest_data.copy()
+    initial_config = load_config()
+    initial_data['target_angle'] = initial_config.get('SETPOINT', 0.0)
+    socketio.emit('update_data', initial_data)
+    
+    data_points_sent = 0
     while server_running:
-        # Load latest config to get target angle
-        config = load_config()
-        latest_data['target_angle'] = config.get('SETPOINT', 0.0)
-        
-        # Send latest data to all clients
-        socketio.emit('update_data', latest_data)
-        
-        # Sleep briefly
-        socketio.sleep(0.1)
+        try:
+            # Load latest config to get target angle
+            config = load_config()
+            latest_data['target_angle'] = config.get('SETPOINT', 0.0)
+            
+            # Send latest data to all clients
+            socketio.emit('update_data', latest_data)
+            
+            data_points_sent += 1
+            if data_points_sent % 100 == 0:  # Log every 100 data points (approx. every 10 seconds)
+                print(f"Sent {data_points_sent} data points to dashboard")
+            
+            # Sleep briefly
+            socketio.sleep(0.1)
+        except Exception as e:
+            print(f"Error in send_data: {e}")
+            socketio.sleep(1)  # Sleep longer on error
 
 def start_server(host='0.0.0.0', port=8080):
     """
@@ -216,6 +295,10 @@ def start_server(host='0.0.0.0', port=8080):
         return
     
     server_running = True
+    
+    # Initialize data with current config values
+    config = load_config()
+    latest_data['target_angle'] = config.get('SETPOINT', 0.0)
     
     # Start background thread for sending data
     socketio.start_background_task(send_data)
@@ -234,7 +317,8 @@ def start_server(host='0.0.0.0', port=8080):
     )
     server_thread.daemon = True
     server_thread.start()
-    print(f"Web dashboard running at http://{host}:{port}")
+    print(f"Web dashboard server started successfully on port {port}")
+    print(f"You can now connect to the dashboard from any browser on your network")
 
 def stop_server():
     """Stop the web server."""
