@@ -77,6 +77,14 @@ DEFAULT_CONFIG = {
     # IMU parameters
     'IMU_FILTER_ALPHA': 0.2,     # Low-pass filter coefficient (0-1)
     'IMU_UPSIDE_DOWN': True,     # Set to True if IMU is mounted upside down
+    
+    # IMU calibration offsets (updated by calibration routine)
+    'IMU_ACCEL_OFFSET_X': 0.002331952416992187,
+    'IMU_ACCEL_OFFSET_Y': -0.14494018010253898,
+    'IMU_ACCEL_OFFSET_Z': 0.46995493779295927,
+    'IMU_GYRO_OFFSET_X': 0.0,
+    'IMU_GYRO_OFFSET_Y': 0.0,
+    'IMU_GYRO_OFFSET_Z': 0.0,
 }
 
 

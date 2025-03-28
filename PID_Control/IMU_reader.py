@@ -43,11 +43,6 @@ class IMUReader:
     Handles inverted (upside-down) mounting of the IMU and integrates with config.py.
     """
 
-    # Calibration offsets for the accelerometer
-    ACCEL_OFFSET_X = 0.002331952416992187
-    ACCEL_OFFSET_Y = -0.14494018010253898
-    ACCEL_OFFSET_Z = 0.46995493779295927
-
     def __init__(self, upside_down=True):
         """
         Initializes the IMU sensor with settings from CONFIG.
@@ -70,8 +65,16 @@ class IMUReader:
                 print("Try checking IMU connections and I2C address (use i2cdetect -y 1)")
                 raise
         
+        # Get calibration values from config
+        self.ACCEL_OFFSET_X = CONFIG.get('IMU_ACCEL_OFFSET_X', 0.002331952416992187)
+        self.ACCEL_OFFSET_Y = CONFIG.get('IMU_ACCEL_OFFSET_Y', -0.14494018010253898)
+        self.ACCEL_OFFSET_Z = CONFIG.get('IMU_ACCEL_OFFSET_Z', 0.46995493779295927)
+        self.GYRO_OFFSET_X = CONFIG.get('IMU_GYRO_OFFSET_X', 0.0)
+        self.GYRO_OFFSET_Y = CONFIG.get('IMU_GYRO_OFFSET_Y', 0.0)
+        self.GYRO_OFFSET_Z = CONFIG.get('IMU_GYRO_OFFSET_Z', 0.0)
+        
         # Set mounting orientation
-        self.MOUNTED_UPSIDE_DOWN = upside_down
+        self.MOUNTED_UPSIDE_DOWN = CONFIG.get('IMU_UPSIDE_DOWN', upside_down)
         
         # Initialize Madgwick filter components
         self.SAMPLE_RATE = 100  # Hz - assumed sample rate
@@ -85,7 +88,7 @@ class IMUReader:
             2000,                      # Gyroscope range (deg/s)
             10,                        # Acceleration rejection threshold
             10,                        # Magnetic rejection threshold
-            5 * self.SAMPLE_RATE,      # Recovery trigger period = 5 seconds
+            1 * self.SAMPLE_RATE,      # Recovery trigger period = 5 seconds
         )
         
         # Initialize timing for filter
@@ -125,20 +128,28 @@ class IMUReader:
     def set_gain(self, gain):
         """
         Update the filter gain parameter and save to CONFIG.
-        For compatibility with previous code, we still call it alpha.
         
         Args:
-            gain: New filter coefficient (0 < gain < 1)
+            gain: New filter gain (0 < gain < 1)
+                 Higher = more responsive to changes, Lower = more stable
         """
         if 0 < gain < 1:
-            # Update Madgwick filter gain (roughly map alpha to gain)
-            # Alpha 0.8 (responsive) -> gain 0.5 (higher)
-            # Alpha 0.2 (smooth) -> gain 0.1 (lower)
+            # Update Madgwick filter gain
+            self.ahrs.settings = imufusion.Settings(
+                imufusion.CONVENTION_NWU,
+                gain,
+                2000,
+                10,
+                10,
+                1 * self.SAMPLE_RATE
+            )
            
-           CONFIG['IMU_FILTER_GAIN'] = gain
-           save_config(CONFIG)
-           print(f"IMU filter gain set to {gain:.2f}")
-           return True
+            # Save to CONFIG
+            CONFIG['IMU_FILTER_GAIN'] = gain
+            save_config(CONFIG)
+            
+            print(f"IMU filter gain set to {gain:.2f}")
+            return True
         else:
             print(f"Invalid gain value: {gain}. Must be between 0 and 1.")
             return False
@@ -163,16 +174,23 @@ class IMUReader:
         if self.MOUNTED_UPSIDE_DOWN:
             accel[1] = -accel[1] - self.ACCEL_OFFSET_Y
             accel[2] = -accel[2] - self.ACCEL_OFFSET_Z
-            gyro[0] = -gyro[0]
+            gyro[0] = -gyro[0] - self.GYRO_OFFSET_X
+            gyro[1] = -gyro[1] - self.GYRO_OFFSET_Y
+            gyro[2] = -gyro[2] - self.GYRO_OFFSET_Z
         else:
+            accel[0] -= self.ACCEL_OFFSET_X
             accel[1] -= self.ACCEL_OFFSET_Y
             accel[2] -= self.ACCEL_OFFSET_Z
+            gyro[0] -= self.GYRO_OFFSET_X
+            gyro[1] -= self.GYRO_OFFSET_Y
+            gyro[2] -= self.GYRO_OFFSET_Z
         
         # Clip acceleration values to reasonable range
         accel = np.clip(accel, -9.81, 9.81)
         
         # Initialize Madgwick filter with first reading
-        self.ahrs.update(gyro, accel, mag, 1.0)  # Use 1.0 as initial dt
+        #self.ahrs.update(gyro, accel, mag, 1.0)  # Use 1.0 as initial dt
+        self.ahrs.update_no_magnetometer(gyro, accel, 1.0)
         
         # Get initial Euler angles
         euler = self.ahrs.quaternion.to_euler()
@@ -207,11 +225,17 @@ class IMUReader:
             # For upside-down mounting, invert Y and Z axes
             accel[1] = -accel[1] - self.ACCEL_OFFSET_Y
             accel[2] = -accel[2] - self.ACCEL_OFFSET_Z
-            gyro[0] = -gyro[0]
+            gyro[0] = -gyro[0] - self.GYRO_OFFSET_X
+            gyro[1] = -gyro[1] - self.GYRO_OFFSET_Y
+            gyro[2] = -gyro[2] - self.GYRO_OFFSET_Z
         else:
             # Normal mounting - apply offsets normally
+            accel[0] -= self.ACCEL_OFFSET_X
             accel[1] -= self.ACCEL_OFFSET_Y
             accel[2] -= self.ACCEL_OFFSET_Z
+            gyro[0] -= self.GYRO_OFFSET_X
+            gyro[1] -= self.GYRO_OFFSET_Y
+            gyro[2] -= self.GYRO_OFFSET_Z
 
         # Prevent extreme acceleration values
         accel = np.clip(accel, -9.81, 9.81)
@@ -225,7 +249,8 @@ class IMUReader:
         self.prev_time = curr_time
         
         # Apply Madgwick filter
-        self.ahrs.update(gyro_filtered, accel, mag, dt)
+        #self.ahrs.update(gyro_filtered, accel, mag, dt)
+        self.ahrs.update_no_magnetometer(gyro_filtered, accel, dt)
         
         # Get Euler angles
         euler = self.ahrs.quaternion.to_euler()

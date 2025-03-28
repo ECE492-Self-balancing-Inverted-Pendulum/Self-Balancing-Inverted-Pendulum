@@ -7,6 +7,7 @@ self-balancing robot but are not core to its operation.
 Functions:
 - imu_tuning_mode: Interactive tool for tuning IMU filter settings
 - motor_test_mode: Interactive tool for testing motor controls
+- calibrate_imu: Calibrate IMU sensor when robot is at rest
 """
 
 import time
@@ -14,6 +15,7 @@ import sys
 import termios
 import tty
 import select
+import numpy as np
 from config import CONFIG, save_config
 
 def imu_tuning_mode(imu):
@@ -288,3 +290,120 @@ def motor_test_mode(motor):
     else:
         motor.stop_motor()
     print("Motor test mode exited. Motors stopped.")
+
+def calibrate_imu(imu):
+    """
+    Calibrate the IMU sensor by measuring offsets when robot is at rest.
+    
+    This function collects multiple samples of IMU data while the robot is stationary
+    and uses them to calculate offsets for accelerometer and gyroscope.
+    
+    Args:
+        imu: IMUReader instance to calibrate
+    
+    Returns:
+        bool: True if calibration was successful, False otherwise
+    """
+    print("\nIMU Calibration Mode")
+    print("--------------------")
+    print("This mode will calibrate your IMU sensor for accurate readings.")
+    print("Please follow these steps:")
+    print("1. Place the robot on a flat, level surface")
+    print("2. Make sure the robot is completely still")
+    print("3. Keep the robot still during the entire calibration process (5 seconds)")
+    
+    # Ask user confirmation to start
+    print("\nIs the robot still on a level surface? (y/n): ", end='', flush=True)
+    response = input().lower()
+    if response != 'y':
+        print("Calibration cancelled.")
+        return False
+    
+    print("\nStarting calibration. Keep the robot still...")
+    print("Collecting data for 5 seconds...")
+    
+    # Collect multiple samples over 5 seconds
+    samples = []
+    accel_samples_x = []
+    accel_samples_y = []
+    accel_samples_z = []
+    gyro_samples_x = []
+    gyro_samples_y = []
+    gyro_samples_z = []
+    
+    # Set the number of samples and duration
+    num_samples = 100
+    calibration_time = 5.0  # seconds
+    
+    start_time = time.time()
+    sample_count = 0
+    
+    # Print a progress indicator
+    sys.stdout.write("\nCalibrating: [" + " " * 20 + "] 0%")
+    sys.stdout.flush()
+    
+    while sample_count < num_samples and time.time() - start_time < calibration_time:
+        # Get raw IMU data
+        raw_data = imu.imu.acceleration, imu.imu.gyro, imu.imu.magnetic
+        accel, gyro, _ = raw_data
+        
+        # Add samples to our lists
+        accel_samples_x.append(accel[0])
+        accel_samples_y.append(accel[1])
+        accel_samples_z.append(accel[2])
+        
+        # Convert gyro data from rad/s to deg/s
+        gyro_deg = np.array(gyro) * (180 / np.pi)
+        gyro_samples_x.append(gyro_deg[0])
+        gyro_samples_y.append(gyro_deg[1])
+        gyro_samples_z.append(gyro_deg[2])
+        
+        # Update progress bar every 10 samples
+        if sample_count % 10 == 0:
+            progress = int((sample_count / num_samples) * 20)
+            percentage = int((sample_count / num_samples) * 100)
+            sys.stdout.write(f"\rCalibrating: [" + "#" * progress + " " * (20 - progress) + f"] {percentage}%")
+            sys.stdout.flush()
+        
+        sample_count += 1
+        time.sleep(calibration_time / num_samples)
+    
+    # Complete the progress bar
+    sys.stdout.write("\rCalibrating: [" + "#" * 20 + "] 100%")
+    sys.stdout.flush()
+    print("\nCalibration data collected!")
+    
+    # Calculate offsets based on averages
+    accel_offset_x = np.mean(accel_samples_x)
+    accel_offset_y = np.mean(accel_samples_y)
+    accel_offset_z = np.mean(accel_samples_z) - 9.81  # Subtract gravity
+    
+    gyro_offset_x = np.mean(gyro_samples_x)
+    gyro_offset_y = np.mean(gyro_samples_y)
+    gyro_offset_z = np.mean(gyro_samples_z)
+    
+    # Display results
+    print("\nCalibration Results:")
+    print(f"Accelerometer offsets: X={accel_offset_x:.6f}, Y={accel_offset_y:.6f}, Z={accel_offset_z:.6f}")
+    print(f"Gyroscope offsets: X={gyro_offset_x:.6f}, Y={gyro_offset_y:.6f}, Z={gyro_offset_z:.6f}")
+    
+    # Confirm saving the calibration
+    print("\nDo you want to save these calibration values? (y/n): ", end='', flush=True)
+    response = input().lower()
+    if response != 'y':
+        print("Calibration cancelled. Values not saved.")
+        return False
+    
+    # Save the calibration values to CONFIG
+    CONFIG['IMU_ACCEL_OFFSET_X'] = float(accel_offset_x)
+    CONFIG['IMU_ACCEL_OFFSET_Y'] = float(accel_offset_y)
+    CONFIG['IMU_ACCEL_OFFSET_Z'] = float(accel_offset_z)
+    CONFIG['IMU_GYRO_OFFSET_X'] = float(gyro_offset_x)
+    CONFIG['IMU_GYRO_OFFSET_Y'] = float(gyro_offset_y)
+    CONFIG['IMU_GYRO_OFFSET_Z'] = float(gyro_offset_z)
+    save_config(CONFIG)
+    
+    print("\nCalibration values saved successfully!")
+    print("Please restart the program for the new calibration to take effect.")
+    
+    return True

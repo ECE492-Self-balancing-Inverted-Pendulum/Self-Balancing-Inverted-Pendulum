@@ -30,7 +30,7 @@ from IMU_reader import IMUReader
 from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
-from utility import imu_tuning_mode, motor_test_mode
+from utility import imu_tuning_mode, motor_test_mode, calibrate_imu
 
 # Import web dashboard functions
 import web_dashboard
@@ -109,6 +109,7 @@ def main():
         print("4. Quick PID Tuning")
         print("5. IMU Tuning Mode")
         print("6. Self-balancing Mode with Web Dashboard")
+        print("7. Calibrate IMU Sensor")
         print("Q. Quit Program")
     
     # Print menu the first time
@@ -116,7 +117,7 @@ def main():
     
     try:
         while True:
-            print("\nEnter choice [1-6, q]: ", end='', flush=True)
+            print("\nEnter choice [1-7, q]: ", end='', flush=True)
             choice = input().lower()
             
             if choice == '1':
@@ -155,6 +156,12 @@ def main():
             elif choice == '6':
                 # Start the self-balancing mode with web dashboard
                 web_dashboard_mode(balance_controller)
+                # Reprint menu after returning from submenu
+                print_menu()
+                
+            elif choice == '7':
+                # Calibrate the IMU sensor
+                calibrate_imu(imu)
                 # Reprint menu after returning from submenu
                 print_menu()
                 
