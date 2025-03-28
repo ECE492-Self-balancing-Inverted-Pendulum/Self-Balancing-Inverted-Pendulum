@@ -39,20 +39,20 @@ import numpy as np
 import imufusion
 # Ensure config.py exists and is accessible
 try:
-    from config import CONFIG, save_config
+    from config import CONFIG, DEFAULT_CONFIG, save_config
 except ImportError:
     print("Warning: config.py not found. Using default settings.")
     # Define default CONFIG if not found, adjust as needed
-    CONFIG = {
+    IMU_CONFIG = {
         'IMU_ACCEL_OFFSET_X': 0.0, 'IMU_ACCEL_OFFSET_Y': 0.0, 'IMU_ACCEL_OFFSET_Z': 0.0,
         'IMU_GYRO_OFFSET_X': 0.0, 'IMU_GYRO_OFFSET_Y': 0.0, 'IMU_GYRO_OFFSET_Z': 0.0,
         'IMU_FILTER_ALPHA': 0.8, # Default alpha to match standalone script
         'IMU_FILTER_GAIN': 0.8,  # Default gain to match standalone script
         'IMU_UPSIDE_DOWN': True
     }
-    def save_config(cfg):
-        print("Warning: save_config is a dummy function.")
-        pass
+    # def save_config(cfg):
+    #     print("Warning: save_config is a dummy function.")
+    #     pass
 
 
 class IMUReader:
@@ -86,12 +86,12 @@ class IMUReader:
                 raise
 
         # Get calibration values from config (use defaults if not found)
-        self.ACCEL_OFFSET_X = CONFIG.get('IMU_ACCEL_OFFSET_X', 0.0)
-        self.ACCEL_OFFSET_Y = CONFIG.get('IMU_ACCEL_OFFSET_Y', 0.0)
-        self.ACCEL_OFFSET_Z = CONFIG.get('IMU_ACCEL_OFFSET_Z', 0.0)
-        self.GYRO_OFFSET_X = CONFIG.get('IMU_GYRO_OFFSET_X', 0.0)
-        self.GYRO_OFFSET_Y = CONFIG.get('IMU_GYRO_OFFSET_Y', 0.0)
-        self.GYRO_OFFSET_Z = CONFIG.get('IMU_GYRO_OFFSET_Z', 0.0)
+        self.ACCEL_OFFSET_X = DEFAULT_CONFIG.get('IMU_ACCEL_OFFSET_X', 0.0)
+        self.ACCEL_OFFSET_Y = DEFAULT_CONFIG.get('IMU_ACCEL_OFFSET_Y', 0.0)
+        self.ACCEL_OFFSET_Z = DEFAULT_CONFIG.get('IMU_ACCEL_OFFSET_Z', 0.0)
+        self.GYRO_OFFSET_X = DEFAULT_CONFIG.get('IMU_GYRO_OFFSET_X', 0.0)
+        self.GYRO_OFFSET_Y = DEFAULT_CONFIG.get('IMU_GYRO_OFFSET_Y', 0.0)
+        self.GYRO_OFFSET_Z = DEFAULT_CONFIG.get('IMU_GYRO_OFFSET_Z', 0.0)
 
         # Combine offsets into arrays for easier subtraction (like standalone script)
         self.accel_offset_vector = np.array([self.ACCEL_OFFSET_X, self.ACCEL_OFFSET_Y, self.ACCEL_OFFSET_Z])
@@ -99,18 +99,19 @@ class IMUReader:
 
         # Set mounting orientation from config, allow override
         if upside_down is None:
-            self.MOUNTED_UPSIDE_DOWN = CONFIG.get('IMU_UPSIDE_DOWN', True)
+            self.MOUNTED_UPSIDE_DOWN = DEFAULT_CONFIG.get('IMU_UPSIDE_DOWN', True)
         else:
             self.MOUNTED_UPSIDE_DOWN = upside_down
-            CONFIG['IMU_UPSIDE_DOWN'] = upside_down # Update config if overridden
+            DEFAULT_CONFIG['IMU_UPSIDE_DOWN'] = upside_down # Update config if overridden
 
         # Initialize Madgwick filter components
-        self.SAMPLE_RATE = 100  # Hz - assumed sample rate
+        # self.SAMPLE_RATE = 100  # Hz - assumed sample rate
+        self.SAMPLE_RATE = 1/DEFAULT_CONFIG.get('SAMPLE_TIME') # Allow config override
         self.offset = imufusion.Offset(self.SAMPLE_RATE) # Keep for pre-filter
         self.ahrs = imufusion.Ahrs()
 
         # --- Consistency Change: Match standalone script's initial gain ---
-        initial_gain = CONFIG.get('IMU_FILTER_GAIN', 0.8) # Default to 0.8
+        initial_gain = DEFAULT_CONFIG.get('MADGWICK_FILTER_GAIN', 0.8) # Default to 0.8
 
         # Set Madgwick filter parameters (Match standalone script)
         self.ahrs.settings = imufusion.Settings(
@@ -124,7 +125,7 @@ class IMUReader:
         print(f"Madgwick filter initialized with gain: {initial_gain:.2f}")
 
         # --- Consistency Change: Match standalone script's alpha ---
-        self.ALPHA = CONFIG.get('IMU_FILTER_ALPHA', 0.8) # Default to 0.8
+        self.ALPHA = DEFAULT_CONFIG.get('IMU_FILTER_ALPHA', 0.2) # Default to 0.8
         print(f"Pre-filter alpha set to: {self.ALPHA:.2f}")
 
 
@@ -151,8 +152,8 @@ class IMUReader:
             self.ahrs.settings.gain = gain
 
             # Save to CONFIG
-            CONFIG['IMU_FILTER_GAIN'] = gain
-            save_config(CONFIG)
+            DEFAULT_CONFIG['MADGWICK_FILTER_GAIN'] = gain
+            save_config(DEFAULT_CONFIG)
 
             print(f"IMU filter gain set to {gain:.2f}")
             return True
