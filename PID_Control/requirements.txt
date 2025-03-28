@@ -4,4 +4,6 @@ Flask>=2.0.0
 Flask-SocketIO>=5.1.1
 python-socketio>=5.5.0
 python-engineio>=4.3.0
-eventlet>=0.30.0 
+eventlet>=0.30.0
+numpy>=1.19.0
+imufusion>=1.0.0 

@@ -7,10 +7,10 @@ measurements that are essential for balancing the robot.
 
 Key features:
 - Supports both normal and upside-down mounting of the IMU
-- Implements low-pass filtering to reduce noise in sensor readings
+- Implements Madgwick filter for more accurate orientation estimation
 - Applies calibration offsets to account for sensor bias
 - Integrates with config.py for tunable parameters
-- Calculates roll angle from accelerometer data and angular velocity from gyroscope
+- Calculates roll angle and angular velocity for balancing
 
 Example Usage:
     # Initialize the IMU
@@ -32,11 +32,14 @@ import math
 import busio
 import board
 import adafruit_icm20x
+import numpy as np
+import imufusion
 from config import CONFIG, save_config
 
 class IMUReader:
     """
     A class for reading and filtering IMU data from the ICM-20948 sensor.
+    Uses Madgwick filter for improved orientation estimation.
     Handles inverted (upside-down) mounting of the IMU and integrates with config.py.
     """
 
@@ -48,6 +51,7 @@ class IMUReader:
     def __init__(self, upside_down=True):
         """
         Initializes the IMU sensor with settings from CONFIG.
+        Sets up the Madgwick filter for orientation estimation.
         """
         # Create I2C interface
         self.i2c = busio.I2C(board.SCL, board.SDA)
@@ -69,15 +73,35 @@ class IMUReader:
         # Set mounting orientation
         self.MOUNTED_UPSIDE_DOWN = upside_down
         
-
-        # First reading (initialize with actual IMU position)
-        self.roll, self.angular_velocity = self._get_initial_reading()
+        # Initialize Madgwick filter components
+        self.SAMPLE_RATE = 100  # Hz - assumed sample rate
+        self.offset = imufusion.Offset(self.SAMPLE_RATE)
+        self.ahrs = imufusion.Ahrs()
         
+        # Set Madgwick filter parameters
+        self.ahrs.settings = imufusion.Settings(
+            imufusion.CONVENTION_NWU,  # North-West-Up convention
+            0.8,                       # Lower gain for smoother response
+            2000,                      # Gyroscope range (deg/s)
+            10,                        # Acceleration rejection threshold
+            10,                        # Magnetic rejection threshold
+            5 * self.SAMPLE_RATE,      # Recovery trigger period = 5 seconds
+        )
         
+        # Initialize timing for filter
+        self.prev_time = time.time()
+        
+        # Initialize orientation values
+        self.roll = 0.0
+        self.angular_velocity = 0.0
+        
+        # First reading to initialize values
+        self._get_initial_reading()
         
     def set_alpha(self, alpha):
         """
-        Update the low-pass filter alpha value and save to CONFIG.
+        Update the filter gain parameter and save to CONFIG.
+        For compatibility with previous code, we still call it alpha.
         
         Args:
             alpha: New filter coefficient (0 < alpha < 1)
@@ -87,74 +111,131 @@ class IMUReader:
             # Import here to ensure we get the most up-to-date CONFIG
             from config import CONFIG, save_config
             
-            # Only update the alpha value in the latest CONFIG
+            # Update the alpha value in CONFIG (for compatibility)
             CONFIG['IMU_FILTER_ALPHA'] = alpha
-            save_config(CONFIG)
             
-            print(f"IMU filter alpha set to {alpha:.2f}")
+            
+            save_config(CONFIG)
+            print(f"IMU filter parameter set to {alpha:.2f} (gain: {gain:.2f})")
             return True
         else:
             print(f"Invalid alpha value: {alpha}. Must be between 0 and 1.")
             return False
+        
+    def set_gain(self, gain):
+        """
+        Update the filter gain parameter and save to CONFIG.
+        For compatibility with previous code, we still call it alpha.
+        
+        Args:
+            gain: New filter coefficient (0 < gain < 1)
+        """
+        if 0 < gain < 1:
+            # Update Madgwick filter gain (roughly map alpha to gain)
+            # Alpha 0.8 (responsive) -> gain 0.5 (higher)
+            # Alpha 0.2 (smooth) -> gain 0.1 (lower)
+           
+           CONFIG['IMU_FILTER_GAIN'] = gain
+           save_config(CONFIG)
+           print(f"IMU filter gain set to {gain:.2f}")
+           return True
+        else:
+            print(f"Invalid gain value: {gain}. Must be between 0 and 1.")
+            return False
+
+            
 
     def _get_initial_reading(self):
         """
         Gets the first IMU reading and sets it as the initial reference.
-        
-        Returns:
-            Initial roll and angular velocity values.
         """
+        # Get raw values
         accel_x, accel_y, accel_z = self.imu.acceleration
-        gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
+        gyro_x, gyro_y, gyro_z = self.imu.gyro
+        mag_x, mag_y, mag_z = self.imu.magnetic
         
-        # Get the upside down value from the config
-        upside_down = CONFIG.get('IMU_UPSIDE_DOWN', True)
-
-        # Handle calibration offsets based on IMU orientation
-        if upside_down:
-            accel_y = -accel_y - self.ACCEL_OFFSET_Y
-            accel_z = -accel_z - self.ACCEL_OFFSET_Z
-            gyro_x = -gyro_x
+        # Convert to numpy arrays and apply offsets
+        accel = np.array([accel_x, accel_y, accel_z])
+        gyro = np.array([gyro_x, gyro_y, gyro_z]) * (180 / np.pi)  # Convert rad/s to deg/s
+        mag = np.array([mag_x, mag_y, mag_z])
+        
+        # Apply calibration offsets
+        if self.MOUNTED_UPSIDE_DOWN:
+            accel[1] = -accel[1] - self.ACCEL_OFFSET_Y
+            accel[2] = -accel[2] - self.ACCEL_OFFSET_Z
+            gyro[0] = -gyro[0]
         else:
-            accel_y -= self.ACCEL_OFFSET_Y
-            accel_z -= self.ACCEL_OFFSET_Z
-
-        # Compute initial roll angle
-        initial_roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
-
-        return initial_roll, gyro_x  # Initialize angular velocity with X-axis rotation
+            accel[1] -= self.ACCEL_OFFSET_Y
+            accel[2] -= self.ACCEL_OFFSET_Z
+        
+        # Clip acceleration values to reasonable range
+        accel = np.clip(accel, -9.81, 9.81)
+        
+        # Initialize Madgwick filter with first reading
+        self.ahrs.update(gyro, accel, mag, 1.0)  # Use 1.0 as initial dt
+        
+        # Get initial Euler angles
+        euler = self.ahrs.quaternion.to_euler()
+        
+        # Store initial roll and gyro values
+        self.roll = euler[0]
+        self.angular_velocity = gyro[0]
+        self.prev_time = time.time()
 
     def get_imu_data(self):
         """
-        Reads IMU data, applies calibration and filtering, and returns processed values.
+        Reads IMU data, applies Madgwick filter, and returns processed values.
         Accounts for the IMU being mounted upside-down.
 
         :return: A dictionary with roll and angular velocity.
         """
-        # Get alpha from config
+        # Get alpha from config (for parameter adjustment compatibility)
         self.ALPHA = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
         
         # Read raw IMU values
         accel_x, accel_y, accel_z = self.imu.acceleration
-        gyro_x, gyro_y, gyro_z = self.imu.gyro  # Angular velocity (°/s)
-
+        gyro_x, gyro_y, gyro_z = self.imu.gyro  # rad/s
+        mag_x, mag_y, mag_z = self.imu.magnetic
+        
+        # Convert to numpy arrays
+        accel = np.array([accel_x, accel_y, accel_z])
+        gyro = np.array([gyro_x, gyro_y, gyro_z]) * (180 / np.pi)  # Convert rad/s to deg/s
+        mag = np.array([mag_x, mag_y, mag_z])
+        
         # Handle calibration offsets based on IMU orientation
         if self.MOUNTED_UPSIDE_DOWN:
             # For upside-down mounting, invert Y and Z axes
-            accel_y = -accel_y - self.ACCEL_OFFSET_Y
-            accel_z = -accel_z - self.ACCEL_OFFSET_Z
-            gyro_x = -gyro_x
+            accel[1] = -accel[1] - self.ACCEL_OFFSET_Y
+            accel[2] = -accel[2] - self.ACCEL_OFFSET_Z
+            gyro[0] = -gyro[0]
         else:
             # Normal mounting - apply offsets normally
-            accel_y -= self.ACCEL_OFFSET_Y
-            accel_z -= self.ACCEL_OFFSET_Z
+            accel[1] -= self.ACCEL_OFFSET_Y
+            accel[2] -= self.ACCEL_OFFSET_Z
 
-        # Compute roll angle from accelerometer (degrees)
-        roll = math.atan2(-accel_y, math.sqrt(accel_x**2 + accel_z**2)) * (180 / math.pi)
-
-        # Apply low-pass filter to stabilize roll readings
-        self.roll = self.ALPHA * roll + (1 - self.ALPHA) * self.roll
-        self.angular_velocity = self.ALPHA * gyro_x + (1 - self.ALPHA) * self.angular_velocity
+        # Prevent extreme acceleration values
+        accel = np.clip(accel, -9.81, 9.81)
+        
+        # Apply pre-filtering to gyro (reduces noise)
+        gyro_filtered = self.ALPHA * gyro + (1 - self.ALPHA) * self.offset.update(gyro)
+        
+        # Get time delta
+        curr_time = time.time()
+        dt = max(curr_time - self.prev_time, 1e-3)  # Prevent division by zero
+        self.prev_time = curr_time
+        
+        # Apply Madgwick filter
+        self.ahrs.update(gyro_filtered, accel, mag, dt)
+        
+        # Get Euler angles
+        euler = self.ahrs.quaternion.to_euler()
+        
+        # Store roll and angular velocity
+        self.roll = euler[0]
+        self.angular_velocity = gyro_filtered[0]  # Use X-axis rotation rate
+        
+        # Clip to reasonable values
+        self.roll = np.clip(self.roll, -180, 180)
 
         return {
             "roll": self.roll,
