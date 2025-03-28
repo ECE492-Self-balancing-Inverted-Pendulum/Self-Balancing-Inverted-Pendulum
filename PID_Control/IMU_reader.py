@@ -105,12 +105,12 @@ class IMUReader:
             self.MOUNTED_UPSIDE_DOWN = upside_down
             DEFAULT_CONFIG['IMU_UPSIDE_DOWN'] = upside_down # Update config if overridden
         
-        print(self.MOUNTED_UPSIDE_DOWN)
+        print("Mounted Upside Down flag: ", self.MOUNTED_UPSIDE_DOWN)
         if self.MOUNTED_UPSIDE_DOWN is False:
             self.MOUNTED_UPSIDE_DOWN = True
         
 
-        # Initialize Madgwick filter components
+        # Initialize imu_setMadgwick filter components
         # self.SAMPLE_RATE = 100  # Hz - assumed sample rate
         self.SAMPLE_RATE = 1/DEFAULT_CONFIG.get('SAMPLE_TIME') # Allow config override
         print(self.SAMPLE_RATE)
@@ -146,6 +146,27 @@ class IMUReader:
 
         # First reading to initialize values
         self._get_initial_reading() # Keep initial reading logic
+
+    def set_alpha(self, alpha):
+        """
+        Update the pre-filter alpha parameter and save to CONFIG.
+        (Corrected implementation) 
+        Args:
+            alpha: New pre-filter alpha (0 < alpha < 1)
+        """
+        if 0 < alpha < 1:
+            # --- Fix: Only update the alpha attribute ---
+            self.ALPHA = alpha
+
+            # Save to CONFIG
+            DEFAULT_CONFIG['IMU_FILTER_ALPHA'] = alpha
+            save_config(DEFAULT_CONFIG)
+
+            print(f"Pre-filter alpha set to {alpha:.2f}")
+            return True
+        else:
+            print(f"Invalid alpha value: {alpha}. Must be between 0 and 1.")
+            return False
 
     def set_gain(self, gain):
         """

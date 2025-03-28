@@ -364,8 +364,8 @@ def calibrate_imu(imu):
         gyro_samples_y.append(gyro_deg[1])
         gyro_samples_z.append(gyro_deg[2])
         
-        # Update progress bar every 10 samples
-        if sample_count % 10 == 0:
+        # Update progress bar every 5 samples
+        if sample_count % 5 == 0:
             progress = int((sample_count / num_samples) * 20)
             percentage = int((sample_count / num_samples) * 100)
             sys.stdout.write(f"\rCalibrating: [" + "#" * progress + " " * (20 - progress) + f"] {percentage}%")
