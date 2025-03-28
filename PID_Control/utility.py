@@ -64,6 +64,7 @@ def imu_tuning_mode(imu):
     print("r: Reset to default (0.2)")
     print("t: Toggle IMU upside-down setting")
     print("d: Display current values")
+    print("m: Change Madgwick Filter Gain")
     print("q: Exit IMU tuning mode")
     print("\nPress any key at any time to use a command.")
     
@@ -96,6 +97,18 @@ def imu_tuning_mode(imu):
                     sys.stdout.write("\nExiting IMU tuning mode.")
                     sys.stdout.flush()
                     running = False
+
+                elif user_input == 'm':
+                    sys.stdout.write("\nEnter Madgwick Filter Gain (0.1 to 1.0): ")
+                    sys.stdout.flush()
+                    madgwick_gain = input().strip()
+                    imu.set_gain(float(madgwick_gain))
+                    
+                    # CONFIG['MADGWICK_FILTER_GAIN'] = float(madgwick_gain)
+                    # save_config(CONFIG)
+                    sys.stdout.write(f"\nMadgwick Filter Gain set to {madgwick_gain}")
+                    sys.stdout.flush()
+                    
                 
                 elif user_input == '+':
                     new_alpha = min(current_alpha + 0.05, 0.95)

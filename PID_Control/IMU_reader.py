@@ -224,6 +224,9 @@ class IMUReader:
             # gyro[0] = -gyro[0] # Still likely incorrect, keep commented
             gyro[1] = -gyro[1]
             gyro[2] = -gyro[2]
+            print("IMU mounted upside down, applying orientation correction.")
+            print("Accel: ", accel)
+            print("Gyro: ", gyro)
 
         # Clip acceleration values (like standalone script)
         accel = np.clip(accel, -9.81, 9.81)
