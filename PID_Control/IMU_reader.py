@@ -43,10 +43,10 @@ try:
 except ImportError:
     print("Warning: config.py not found. Using default settings.")
     # Define default CONFIG if not found, adjust as needed
-    IMU_CONFIG = {
+    DEFAULT_CONFIG = {
         'IMU_ACCEL_OFFSET_X': 0.0, 'IMU_ACCEL_OFFSET_Y': 0.0, 'IMU_ACCEL_OFFSET_Z': 0.0,
         'IMU_GYRO_OFFSET_X': 0.0, 'IMU_GYRO_OFFSET_Y': 0.0, 'IMU_GYRO_OFFSET_Z': 0.0,
-        'IMU_FILTER_ALPHA': 0.8, # Default alpha to match standalone script
+        'IMU_FILTER_ALPHA': 0.2, # Default alpha to match standalone script
         'IMU_FILTER_GAIN': 0.8,  # Default gain to match standalone script
         'IMU_UPSIDE_DOWN': True
     }
