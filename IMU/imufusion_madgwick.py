@@ -39,7 +39,7 @@ ahrs = imufusion.Ahrs()
 # Set Madgwick filter parameters (Lower gain for smoother response)
 ahrs.settings = imufusion.Settings(
     imufusion.CONVENTION_NWU,  # North-West-Up (NWU) convention
-    0.7,  # **Reduced gain for better stability**
+    0.8,  # **Reduced gain for better stability**
     2000,  # Gyroscope range (deg/s)
     10,  # Acceleration rejection threshold
     10,  # Magnetic rejection threshold
