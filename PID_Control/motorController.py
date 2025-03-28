@@ -52,9 +52,9 @@ class MotorControl:
         
         if direction == "clockwise":
             self.pwm1.ChangeDutyCycle(speed)
-            self.pwm2.ChangeDutyCycle(speed)
+            self.pwm2.ChangeDutyCycle(0)
         elif direction == "counterclockwise":
-            self.pwm1.ChangeDutyCycle(speed)
+            self.pwm1.ChangeDutyCycle(0)
             self.pwm2.ChangeDutyCycle(speed)
         else:
             self.stop_motor()
