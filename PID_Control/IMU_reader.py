@@ -279,6 +279,7 @@ class IMUReader:
             "angular_velocity": self.angular_velocity # Return the pre-filtered value
         }
 
+    #  Not being called by main. Needs to be in utility.py
     def print_imu_data(self, delay=0.1):
         """
         Continuously prints the IMU data for debugging on a single updating line.

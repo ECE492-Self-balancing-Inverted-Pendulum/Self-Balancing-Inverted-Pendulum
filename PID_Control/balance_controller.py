@@ -142,6 +142,7 @@ class BalanceController:
                 # Ensure we're running at the correct sample rate
                 if time_passed < sample_time:
                     time.sleep(0.001)  # Small sleep to prevent CPU hogging
+                    temp_imu_date = self.imu.get_imu_data() # This is to keep the IMU active when PID is sleeping
                     continue
                 
                 # Get IMU data

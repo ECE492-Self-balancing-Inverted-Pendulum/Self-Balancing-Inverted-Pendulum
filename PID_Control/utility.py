@@ -16,7 +16,13 @@ import termios
 import tty
 import select
 import numpy as np
-from config import CONFIG, save_config
+
+try:
+    from config import save_config, load_config
+    CONFIG = load_config()
+except ImportError:
+    CONFIG = {}
+    print("Failed to load configuration.")
 
 def imu_tuning_mode(imu):
     """
