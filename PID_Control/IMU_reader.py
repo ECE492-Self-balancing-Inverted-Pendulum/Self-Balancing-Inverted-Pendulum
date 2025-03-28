@@ -39,7 +39,8 @@ import numpy as np
 import imufusion
 # Ensure config.py exists and is accessible
 try:
-    from config import CONFIG, DEFAULT_CONFIG, save_config
+    from config import CONFIG, save_config, load_config
+    DEFAULT_CONFIG = load_config()
 except ImportError:
     print("Warning: config.py not found. Using default settings.")
     # Define default CONFIG if not found, adjust as needed
