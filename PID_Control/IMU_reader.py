@@ -104,10 +104,17 @@ class IMUReader:
         else:
             self.MOUNTED_UPSIDE_DOWN = upside_down
             DEFAULT_CONFIG['IMU_UPSIDE_DOWN'] = upside_down # Update config if overridden
+        
+        print(self.MOUNTED_UPSIDE_DOWN)
+        if self.MOUNTED_UPSIDE_DOWN is False:
+            self.MOUNTED_UPSIDE_DOWN = True
+        
 
         # Initialize Madgwick filter components
         # self.SAMPLE_RATE = 100  # Hz - assumed sample rate
         self.SAMPLE_RATE = 1/DEFAULT_CONFIG.get('SAMPLE_TIME') # Allow config override
+        print(self.SAMPLE_RATE)
+        self.SAMPLE_RATE = int(self.SAMPLE_RATE)
         self.offset = imufusion.Offset(self.SAMPLE_RATE) # Keep for pre-filter
         self.ahrs = imufusion.Ahrs()
 
