@@ -99,8 +99,8 @@ def imu_tuning_mode(imu):
                     running = False
 
                 elif user_input == 'm':
-                    sys.stdout.write("\nEnter Madgwick Filter Gain (0.1 to 1.0): ")
-                    sys.stdout.flush()
+                    print("\nEnter Madgwick Filter Gain (0.1 to 1.0): ")
+                    # sys.stdout.flush()
                     madgwick_gain = input().strip()
                     imu.set_gain(float(madgwick_gain))
                     
