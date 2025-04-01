@@ -31,6 +31,7 @@ from config import CONFIG, HARDWARE_CONFIG
 from balance_controller import BalanceController
 from tuning import PIDTuner
 from utility import imu_tuning_mode, motor_test_mode, calibrate_imu
+from IMUReaderThreaded import IMUReaderThreaded
 
 # Import web dashboard functions
 import web_dashboard
@@ -83,7 +84,10 @@ def main():
     """
     # Initialize IMU with configuration from CONFIG
     # This compensates for the orientation of the IMU (upside-down or normal)
-    imu = IMUReader()
+    # imu = IMUReader()
+
+    # Sending a threaded IMU reader to the balance controller
+    imu = IMUReaderThreaded(IMUReader())
     
     # Initialize motor control - Using DualMotorControl for both motors
     motors = DualMotorControl(

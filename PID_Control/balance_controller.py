@@ -32,6 +32,7 @@ import time
 from pid_controller import PIDController
 from motorController import MotorControl, DualMotorControl
 from config import load_config
+from IMUReaderThreaded import IMUReaderThreaded
 
 class BalanceController:
     """
@@ -119,6 +120,9 @@ class BalanceController:
         
         # Reset PID controller
         self.pid.reset()
+
+        # Start the IMU thread
+        self.imu.start()
         
         # Set running flag
         self.running = True
@@ -141,12 +145,17 @@ class BalanceController:
                 
                 # Ensure we're running at the correct sample rate
                 if time_passed < sample_time:
-                    time.sleep(0.001)  # Small sleep to prevent CPU hogging
-                    temp_imu_date = self.imu.get_imu_data() # This is to keep the IMU active when PID is sleeping
-                    continue
+                    time.sleep(sample_time - time_passed)  # Small sleep to prevent CPU hogging
+                    #temp_imu_date = self.imu.get_imu_data() # This is to keep the IMU active when PID is sleeping
+                    # continue
                 
                 # Get IMU data
-                imu_data = self.imu.get_imu_data()
+                # imu_data = self.imu.get_imu_data()
+                imu_data = self.imu.get_latest_data()
+                if imu_data is None:
+                    continue  # Data is not available yet, skip this iteration
+                    # start from the top of the loop
+
                 roll = imu_data['roll']
                 angular_velocity = imu_data['angular_velocity']
                 
@@ -201,6 +210,7 @@ class BalanceController:
     def stop_balancing(self):
         """Stop the balancing control loop."""
         self.running = False
+        self.imu.stop() # stop the IMU thread
         if self.using_dual_motors:
             self.motor.stop_motors()
         else:
