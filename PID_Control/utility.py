@@ -16,6 +16,7 @@ import termios
 import tty
 import select
 import numpy as np
+import json
 
 try:
     from config import save_config, load_config
@@ -27,17 +28,16 @@ except ImportError:
 def imu_tuning_mode(imu):
     """
     Interactive mode for tuning IMU responsiveness.
-    Displays IMU data on a single line and allows adjusting the alpha filter value.
+    Displays IMU data on a single line and allows adjusting the Madgwick filter gain.
     
     Args:
         imu: IMUReader instance to tune
     
     Controls:
-        +: Increase alpha (more responsive)
-        -: Decrease alpha (smoother)
-        r: Reset to default (0.2)
+        +: Increase gain (more responsive)
+        -: Decrease gain (smoother)
+        r: Reset to default (0.8)
         t: Toggle IMU upside-down setting
-        d: Display current settings in detail
         q: Exit tuning mode
     
     Example:
@@ -52,19 +52,17 @@ def imu_tuning_mode(imu):
     print("This mode allows you to adjust the IMU filter settings")
     print("to find the right balance between responsiveness and stability.")
     
-    # Get current alpha value from CONFIG directly
-    current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+    # Get current gain value
+    current_gain = imu.ahrs.settings.gain
     
-    print("\nCurrent alpha value:", current_alpha)
-    print("Higher alpha = more responsive but noisier")
-    print("Lower alpha = smoother but slower to respond")
+    print("\nCurrent filter gain:", current_gain)
+    print("Higher gain = more responsive but may be less stable")
+    print("Lower gain = more stable but slower to respond")
     print("\nCommands:")
-    print("+: Increase alpha by 0.05 (more responsive)")
-    print("-: Decrease alpha by 0.05 (smoother)")
-    print("r: Reset to default (0.2)")
+    print("+: Increase gain by 0.05 (more responsive)")
+    print("-: Decrease gain by 0.05 (smoother)")
+    print("r: Reset to default (0.8)")
     print("t: Toggle IMU upside-down setting")
-    print("d: Display current values")
-    print("m: Change Madgwick Filter Gain")
     print("q: Exit IMU tuning mode")
     print("\nPress any key at any time to use a command.")
     
@@ -76,18 +74,16 @@ def imu_tuning_mode(imu):
         
         running = True
         while running:
-            # Get IMU data - this also updates the ALPHA value inside IMU
+            # Get IMU data
             imu_data = imu.get_imu_data()
             roll = imu_data['roll']
             angular_velocity = imu_data['angular_velocity']
-            raw_roll = imu_data['raw_roll']
-            pre_roll = imu_data['pre_roll']
             
-            # Get current alpha value directly from CONFIG
-            current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
+            # Get current gain value
+            current_gain = imu.ahrs.settings.gain
             
             # Print data on the same line using \r
-            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN} \n \rRaw Roll: {raw_roll:+6.2f}° | Roll with pre-filter: {pre_roll:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Gain: {current_gain:.2f} | Upside-down: {imu.upside_down}")
             sys.stdout.flush()
             
             # Check if there's any input without blocking
@@ -99,62 +95,34 @@ def imu_tuning_mode(imu):
                     sys.stdout.write("\nExiting IMU tuning mode.")
                     sys.stdout.flush()
                     running = False
-
-                elif user_input == 'm':
-                    print("\nEnter Madgwick Filter Gain (0.1 to 1.0): ")
-                    # sys.stdout.flush()
-                    madgwick_gain = input().strip()
-                    imu.set_gain(float(madgwick_gain))
-                    
-                    # CONFIG['MADGWICK_FILTER_GAIN'] = float(madgwick_gain)
-                    # save_config(CONFIG)
-                    sys.stdout.write(f"\nMadgwick Filter Gain set to {madgwick_gain}")
-                    sys.stdout.flush()
-                    
                 
                 elif user_input == '+':
-                    new_alpha = min(current_alpha + 0.05, 0.95)
-                    imu.set_alpha(new_alpha)
-                    sys.stdout.write(f"\nIncreased alpha to {new_alpha:.2f}")
+                    new_gain = min(current_gain + 0.05, 0.95)
+                    imu.set_gain(new_gain)
+                    sys.stdout.write(f"\nIncreased gain to {new_gain:.2f}")
                     sys.stdout.flush()
-                    
-                    # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                    save_config(CONFIG)
                 
                 elif user_input == '-':
-                    new_alpha = max(current_alpha - 0.05, 0.05)
-                    imu.set_alpha(new_alpha)
-                    sys.stdout.write(f"\nDecreased alpha to {new_alpha:.2f}")
+                    new_gain = max(current_gain - 0.05, 0.05)
+                    imu.set_gain(new_gain)
+                    sys.stdout.write(f"\nDecreased gain to {new_gain:.2f}")
                     sys.stdout.flush()
-                    
-                    # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = new_alpha
-                    save_config(CONFIG)
                 
                 elif user_input == 'r':
-                    default_alpha = 0.2  # Default alpha value
-                    imu.set_alpha(default_alpha)
-                    sys.stdout.write(f"\nReset alpha to default ({default_alpha:.2f})")
+                    default_gain = 0.8  # Default gain value
+                    imu.set_gain(default_gain)
+                    sys.stdout.write(f"\nReset gain to default ({default_gain:.2f})")
                     sys.stdout.flush()
-                    
-                    # Update the config
-                    CONFIG['IMU_FILTER_ALPHA'] = default_alpha
-                    save_config(CONFIG)
                 
                 elif user_input == 't':
                     # Toggle the upside-down setting
-                    imu.MOUNTED_UPSIDE_DOWN = not imu.MOUNTED_UPSIDE_DOWN
-                    sys.stdout.write(f"\nToggled IMU orientation. Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
-                    sys.stdout.flush()
+                    imu.upside_down = not imu.upside_down
                     
-                    # Update the config
-                    CONFIG['IMU_UPSIDE_DOWN'] = imu.MOUNTED_UPSIDE_DOWN
+                    # Update config
+                    CONFIG['IMU_UPSIDE_DOWN'] = imu.upside_down
                     save_config(CONFIG)
-                
-                elif user_input == 'd':
-                    current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
-                    sys.stdout.write(f"\nCurrent settings: Alpha: {current_alpha:.2f}, Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+                    
+                    sys.stdout.write(f"\nToggled IMU orientation. Upside-down: {imu.upside_down}")
                     sys.stdout.flush()
                 
                 # Clear line after key press
@@ -344,7 +312,6 @@ def calibrate_imu(imu):
     print("Collecting data for 5 seconds...")
     
     # Collect multiple samples over 5 seconds
-    samples = []
     accel_samples_x = []
     accel_samples_y = []
     accel_samples_z = []
@@ -365,8 +332,8 @@ def calibrate_imu(imu):
     
     while sample_count < num_samples and time.time() - start_time < calibration_time:
         # Get raw IMU data
-        raw_data = imu.imu.acceleration, imu.imu.gyro, imu.imu.magnetic
-        accel, gyro, _ = raw_data
+        raw_data = imu.imu.acceleration, imu.imu.gyro
+        accel, gyro = raw_data
         
         # Add samples to our lists
         accel_samples_x.append(accel[0])
@@ -415,16 +382,20 @@ def calibrate_imu(imu):
         print("Calibration cancelled. Values not saved.")
         return False
     
-    # Save the calibration values to CONFIG
-    CONFIG['IMU_ACCEL_OFFSET_X'] = float(accel_offset_x)
-    CONFIG['IMU_ACCEL_OFFSET_Y'] = float(accel_offset_y)
-    CONFIG['IMU_ACCEL_OFFSET_Z'] = float(accel_offset_z)
-    CONFIG['IMU_GYRO_OFFSET_X'] = float(gyro_offset_x)
-    CONFIG['IMU_GYRO_OFFSET_Y'] = float(gyro_offset_y)
-    CONFIG['IMU_GYRO_OFFSET_Z'] = float(gyro_offset_z)
+    # Create arrays for the CONFIG dictionary
+    accel_offset = [float(accel_offset_x), float(accel_offset_y), float(accel_offset_z)]
+    gyro_offset = [float(gyro_offset_x), float(gyro_offset_y), float(gyro_offset_z)]
+    
+    # Save directly to CONFIG
+    CONFIG['IMU_ACCEL_OFFSET'] = accel_offset
+    CONFIG['IMU_GYRO_OFFSET'] = gyro_offset
+    CONFIG['IMU_UPSIDE_DOWN'] = imu.upside_down
+    
+    
+    # Save CONFIG
     save_config(CONFIG)
     
-    print("\nCalibration values saved successfully!")
+    print("\nCalibration values saved successfully to config!")
     print("Please restart the program for the new calibration to take effect.")
     
     return True

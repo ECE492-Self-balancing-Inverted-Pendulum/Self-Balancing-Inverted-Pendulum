@@ -127,25 +127,14 @@ class BalanceController:
             # Initialize timing variables
             last_time = time.time()
             last_print_time = time.time()
-            last_debug_time = time.time()  # Initialize this for debug callback
+            last_debug_time = time.time()
             
             # Main control loop
             while self.running:
-                # Calculate time since last loop
-                current_time = time.time()
-                time_passed = current_time - last_time
+                # Calculate next cycle time first
+                next_cycle_time = last_time + load_config().get('SAMPLE_TIME', 0.01)
                 
-                # Get latest sample time from config
-                config = load_config()
-                sample_time = config.get('SAMPLE_TIME', 0.01)
-                
-                # Ensure we're running at the correct sample rate
-                if time_passed < sample_time:
-                    time.sleep(0.001)  # Small sleep to prevent CPU hogging
-                    temp_imu_date = self.imu.get_imu_data() # This is to keep the IMU active when PID is sleeping
-                    continue
-                
-                # Get IMU data
+                # Get IMU data and perform control calculations
                 imu_data = self.imu.get_imu_data()
                 roll = imu_data['roll']
                 angular_velocity = imu_data['angular_velocity']
@@ -153,24 +142,23 @@ class BalanceController:
                 # Calculate PID output
                 output = self.pid.compute(
                     current_value=roll,
-                    dt=time_passed
+                    dt=time.time() - last_time
                 )
                 
                 # Apply the output to the motor(s)
                 result = self.apply_motor_control(output)
                 output, motor_speed, direction = result
                 
-                # Update for next iteration
-                last_time = current_time
+                # Update timing for next control cycle
+                last_time = time.time()
                 
-                # Print status on same line (throttled to 2Hz)
+                # Handle non-critical operations without affecting sample rate
+                current_time = time.time()
                 if current_time - last_print_time >= 0.5:
                     print(f"\rRoll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}", end='', flush=True)
                     last_print_time = current_time
                 
-                # Optional debug callback (throttled to 10Hz)
                 if debug_callback and current_time - last_debug_time >= 0.1:
-                    # Get PID terms directly from config instead of relying on internal PID state
                     config = load_config()
                     debug_info = {
                         'roll': roll,
@@ -186,6 +174,11 @@ class BalanceController:
                     debug_callback(debug_info)
                     last_debug_time = current_time
                 
+                # Sleep precisely until next cycle
+                sleep_time = next_cycle_time - time.time()
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+            
         except KeyboardInterrupt:
             print("\nBalancing stopped by user (Ctrl+C)")
         except Exception as e:
