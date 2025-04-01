@@ -245,87 +245,87 @@ class IMUReader:
         self.angular_velocity = gyro_filtered[0] # Use pre-filtered gyro
 
 
-    def get_imu_data(self):
+    def get_imu_data(self, full_output=False):
         """
         Reads IMU data, applies pre-filter + Madgwick filter (no magnetometer),
-        and returns processed values, aiming for consistency with standalone script.
-
-        :return: A dictionary with 'roll' and 'angular_velocity'.
+        and returns processed values. If full_output=True, returns raw, pre-filtered,
+        and fully filtered values.
         """
-        # Get time delta
         curr_time = time.time()
         dt = max(curr_time - self.prev_time, 1e-4)
         self.prev_time = curr_time
 
-        # Read raw IMU values
         accel_raw = self.imu.acceleration
         gyro_raw = self.imu.gyro  # rad/s
-        # mag_raw = self.imu.magnetic # Not needed
 
-        # Convert to numpy arrays
         accel = np.array(accel_raw)
-        gyro = np.array(gyro_raw) * (180 / np.pi)  # Convert rad/s to deg/s
+        gyro = np.array(gyro_raw) * (180 / np.pi)
 
-        # --- Consistency Change: Apply offsets simply like standalone script ---
-        # Apply offsets BEFORE potential orientation changes
-        accel = accel - self.accel_offset_vector
-        gyro = gyro - self.gyro_offset_vector
+        accel -= self.accel_offset_vector
+        gyro -= self.gyro_offset_vector
 
-        # Apply orientation logic (kept from original class, may need testing)
         if self.MOUNTED_UPSIDE_DOWN:
             accel[1] = -accel[1]
             accel[2] = -accel[2]
-            # gyro[0] = -gyro[0] # Still likely incorrect, keep commented
             gyro[1] = -gyro[1]
             gyro[2] = -gyro[2]
 
-        # Clip acceleration values (like standalone script)
         accel = np.clip(accel, -9.81, 9.81)
 
-        # Apply pre-filtering to gyro (using the fixed self.ALPHA = 0.8)
         gyro_filtered = self.ALPHA * gyro + (1 - self.ALPHA) * self.offset.update(gyro)
 
-        # Apply Madgwick filter (Match standalone script)
         self.ahrs.update_no_magnetometer(gyro_filtered, accel, dt)
-
-        # Get Euler angles
         euler = self.ahrs.quaternion.to_euler()
 
-        # Store roll and angular velocity (Match standalone script's source)
-        self.roll = euler[0]
-        self.angular_velocity = gyro_filtered[0]  # Use pre-filtered gyro X-axis rate
+        roll_filtered = euler[0]
+        ang_vel_filtered = gyro_filtered[0]
 
-        # Clip roll angle (like standalone script)
-        self.roll = np.clip(self.roll, -180, 180)
+        self.roll = roll_filtered
+        self.angular_velocity = ang_vel_filtered
 
-        return {
-            "roll": self.roll,
-            "angular_velocity": self.angular_velocity # Return the pre-filtered value
-        }
+        if full_output:
+            return {
+                "raw_roll": gyro[0],
+                "raw_angular_velocity": gyro[0],
+                "pre_roll": gyro_filtered[0],
+                "pre_angular_velocity": gyro_filtered[0],
+                "filtered_roll": roll_filtered,
+                "filtered_angular_velocity": ang_vel_filtered
+            }
+        else:
+            return {
+                "roll": roll_filtered,
+                "angular_velocity": ang_vel_filtered
+            }
 
     #  Not being called by main. Needs to be in utility.py
     def print_imu_data(self, delay=0.1):
         """
-        Continuously prints the IMU data for debugging on a single updating line.
+        Continuously prints IMU data in three constant updating rows:
+        1. Raw IMU data (unfiltered)
+        2. Pre-filtered data (after applying the pre-filter)
+        3. Fully filtered data (after applying both pre-filter and Madgwick filter)
         """
         try:
-            print(f"IMU Orientation: {'Upside Down' if self.MOUNTED_UPSIDE_DOWN else 'Normal'}")
-            print(f"Accel Offsets: X={self.ACCEL_OFFSET_X:.4f}, Y={self.ACCEL_OFFSET_Y:.4f}, Z={self.ACCEL_OFFSET_Z:.4f}")
-            print(f"Gyro Offsets: X={self.GYRO_OFFSET_X:.4f}, Y={self.GYRO_OFFSET_Y:.4f}, Z={self.GYRO_OFFSET_Z:.4f}")
-            print(f"Madgwick Gain: {self.ahrs.settings.gain:.2f}")
-            print(f"Pre-filter Alpha: {self.ALPHA:.2f}")
-            print("Press Ctrl+C to stop")
-            print("Reading data...", flush=True)
+            print("IMU Data Streaming... Press Ctrl+C to stop")
+            print("Raw Data         | Pre-filtered Data | Fully Filtered Data")
+            print("-----------------|------------------|--------------------")
 
             while True:
-                imu_data = self.get_imu_data()
-                print(f"\rRoll: {imu_data['roll']:+7.2f}° | AngVel: {imu_data['angular_velocity']:+7.2f}°/s", end='', flush=True)
+                imu_data = self.get_imu_data(full_output=True)
+                
+                print(f"\rRaw:   Roll: {imu_data['raw_roll']:+7.2f}° | AngVel: {imu_data['raw_angular_velocity']:+7.2f}°/s    ", end='')
+                print(f"\nPre:   Roll: {imu_data['pre_roll']:+7.2f}° | AngVel: {imu_data['pre_angular_velocity']:+7.2f}°/s    ", end='')
+                print(f"\nFilt:  Roll: {imu_data['filtered_roll']:+7.2f}° | AngVel: {imu_data['filtered_angular_velocity']:+7.2f}°/s    ", end='')
+                print("\n--------------------------------------------------", end='')
+
                 time.sleep(delay)
 
         except KeyboardInterrupt:
             print("\nIMU Reader Stopped.")
         finally:
             print("", flush=True)
+
 
 # Example usage
 if __name__ == "__main__":
