@@ -80,12 +80,14 @@ def imu_tuning_mode(imu):
             imu_data = imu.get_imu_data()
             roll = imu_data['roll']
             angular_velocity = imu_data['angular_velocity']
+            raw_roll = imu_data['raw_roll']
+            pre_roll = imu_data['pre_roll']
             
             # Get current alpha value directly from CONFIG
             current_alpha = CONFIG.get('IMU_FILTER_ALPHA', 0.2)
             
             # Print data on the same line using \r
-            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
+            sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN} \n \rRaw Roll: {raw_roll:+6.2f}° | Roll with pre-filter: {pre_roll:+6.2f}°/s | Alpha: {current_alpha:.2f} | Upside-down: {imu.MOUNTED_UPSIDE_DOWN}")
             sys.stdout.flush()
             
             # Check if there's any input without blocking

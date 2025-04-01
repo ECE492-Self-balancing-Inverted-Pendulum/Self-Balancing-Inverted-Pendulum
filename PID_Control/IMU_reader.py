@@ -245,7 +245,7 @@ class IMUReader:
         self.angular_velocity = gyro_filtered[0] # Use pre-filtered gyro
 
 
-    def get_imu_data(self, full_output=False):
+    def get_imu_data(self, full_output=True):
         """
         Reads IMU data, applies pre-filter + Madgwick filter (no magnetometer),
         and returns processed values. If full_output=True, returns raw, pre-filtered,
@@ -289,8 +289,8 @@ class IMUReader:
                 "raw_angular_velocity": gyro[0],
                 "pre_roll": gyro_filtered[0],
                 "pre_angular_velocity": gyro_filtered[0],
-                "filtered_roll": roll_filtered,
-                "filtered_angular_velocity": ang_vel_filtered
+                "roll": roll_filtered,
+                "angular_velocity": ang_vel_filtered
             }
         else:
             return {
