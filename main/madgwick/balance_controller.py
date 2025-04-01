@@ -73,7 +73,7 @@ try:
         accel = np.clip(accel, -9.81, 9.81)
         
         # Apply low-pass filter to gyro
-        alpha = 0.8
+        alpha = 0.15
         gyro = alpha * gyro + (1 - alpha) * offset.update(gyro)
         
         # Get time delta
