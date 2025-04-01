@@ -72,6 +72,15 @@ try:
         # Prevent acceleration fluctuations
         accel = np.clip(accel, -9.81, 9.81)
         
+        MOUNTED_UPSIDE_DOWN = True  # Set to True if IMU is mounted upside down
+        
+        if MOUNTED_UPSIDE_DOWN:
+            accel[1] = -accel[1]
+            accel[2] = -accel[2]
+            # gyro[0] = -gyro[0] # Still likely incorrect, keep commented
+            gyro[1] = -gyro[1]
+            gyro[2] = -gyro[2]
+
         # Apply low-pass filter to gyro
         alpha = 0.15
         gyro = alpha * gyro + (1 - alpha) * offset.update(gyro)
