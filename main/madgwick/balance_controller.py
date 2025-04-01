@@ -3,6 +3,7 @@ import board
 import adafruit_icm20x
 import numpy as np
 import imufusion
+import sys
 import json
 from pid_controller import PIDController
 from motorController import DualMotorControl
@@ -73,7 +74,7 @@ try:
         accel = np.clip(accel, -9.81, 9.81)
         
         MOUNTED_UPSIDE_DOWN = True  # Set to True if IMU is mounted upside down
-        
+
         if MOUNTED_UPSIDE_DOWN:
             accel[1] = -accel[1]
             accel[2] = -accel[2]
@@ -116,8 +117,8 @@ try:
             motors.set_motors_speed(motor_speed, "counterclockwise")
         
         # Display current status
-        print(f"\Current (Roll) Angle: {current_angle:.2f}° | Pitch Angle: {pitch:.2f}° | PID Output: {pid_output:.2f} | Motor Speed: {motor_speed:.2f}", end="")
-        
+        sys.stdout.write(f"\rCurrent (Roll) Angle: {current_angle:.2f}° | Pitch Angle: {pitch:.2f}° | PID Output: {pid_output:.2f} | Motor Speed: {motor_speed:.2f}")
+        sys.stdout.flush()
         # Maintain sampling rate
         time.sleep(1 / SAMPLE_RATE)
 
