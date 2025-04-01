@@ -58,34 +58,25 @@ HARDWARE_CONFIG = {
 # Default configuration for the self-balancing robot
 DEFAULT_CONFIG = {
     # PID Controller Parameters (easily adjustable)
-    'P_GAIN': 5.0,     # Proportional gain (how strongly to react to current error)
-    'I_GAIN': 0.1,     # Integral gain (how strongly to react to accumulated error)
-    'D_GAIN': 1.0,     # Derivative gain (how strongly to react to rate of change)
+    'P_GAIN': 45,     # Proportional gain (how strongly to react to current error)
+    'I_GAIN': 0.9,     # Integral gain (how strongly to react to accumulated error)
+    'D_GAIN': 1.35,     # Derivative gain (how strongly to react to rate of change)
     'MAX_I_TERM': 20,  # Maximum integral term to prevent windup
     'SETPOINT': 0.0,   # Target angle (0 = balanced upright)
     
     # Motor parameters
-    'MOTOR_DEADBAND': 20,  # Motor doesn't move below this value (0-100)
+    'MOTOR_DEADBAND': 15,  # Motor doesn't move below this value (0-100)
     'MAX_MOTOR_SPEED': 100, # Maximum motor speed (0-100)
     'SAFE_TILT_LIMIT': 90,  # Safety cutoff angle in degrees
     'DIRECTION_CHANGE_BOOST': 10.0,  # Percentage boost when changing direction (0-100)
-    'ZERO_THRESHOLD': 0.1,  # Threshold below which output is considered zero (0-100)
+    'ZERO_THRESHOLD': 0.5,  # Threshold below which output is considered zero (0-100)
     
     # Loop timing
     'SAMPLE_TIME': 0.01,  # Time between PID updates (seconds)
     
     # IMU parameters
-    'IMU_FILTER_ALPHA': 0.2,     # Low-pass filter coefficient (0-1)
+    'IMU_FILTER_ALPHA': 0.15,     # Low-pass filter coefficient (0-1)
     'IMU_UPSIDE_DOWN': True,     # Set to True if IMU is mounted upside down
-    
-    # IMU calibration offsets (updated by calibration routine)
-    'IMU_ACCEL_OFFSET_X': 0.002331952416992187,
-    'IMU_ACCEL_OFFSET_Y': -0.14494018010253898,
-    'IMU_ACCEL_OFFSET_Z': 0.46995493779295927,
-    'IMU_GYRO_OFFSET_X': 0.0,
-    'IMU_GYRO_OFFSET_Y': 0.0,
-    'IMU_GYRO_OFFSET_Z': 0.0,
-    'MADGWICK_FILTER_GAIN': 0.8
 }
 
 

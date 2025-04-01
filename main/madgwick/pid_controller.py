@@ -24,7 +24,7 @@ Example Usage:
     motors.set_speed(abs(output), "clockwise" if output > 0 else "counterclockwise")
 """
 
-from config import load_config
+from config import load_config, DEFAULT_CONFIG
 
 class PIDController:
     """PID Controller for balancing robot that uses the latest configuration values."""
@@ -47,13 +47,15 @@ class PIDController:
             Control output value (-100 to 100)
         """
         # Get the latest PID parameters from CONFIG
-        current_config = load_config()
+        current_config = DEFAULT_CONFIG
         
         # Update PID parameters from CONFIG
         self.kp = current_config.get('P_GAIN', 5.0)
         self.ki = current_config.get('I_GAIN', 0.1)
         self.kd = current_config.get('D_GAIN', 1.0)
-        
+       
+       # print(f"These are the PID vals: P: {self.kp}, i {self.ki}, d {self.kd}")
+       
         # Update setpoint from CONFIG
         self.setpoint = current_config.get('target_angle', 0.0)
         

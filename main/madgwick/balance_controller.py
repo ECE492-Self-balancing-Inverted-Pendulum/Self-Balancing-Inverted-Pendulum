@@ -13,10 +13,10 @@ pid = PIDController()
 
 # Initialize motor controller (adjust GPIO pins as needed)
 motors = DualMotorControl(
-    motor_a_in1=17, 
-    motor_a_in2=18, 
-    motor_b_in1=22, 
-    motor_b_in2=23, 
+    motor_a_in1=18, 
+    motor_a_in2=12, 
+    motor_b_in1=19, 
+    motor_b_in2=13, 
     pwm_freq=1000
 )
 
