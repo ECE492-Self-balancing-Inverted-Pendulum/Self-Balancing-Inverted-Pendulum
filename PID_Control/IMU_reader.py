@@ -116,7 +116,7 @@ class IMUReader:
             gyro[2] = -gyro[2]
         
         # Apply low-pass filter to gyro
-        alpha = self.config.get('IMU_FILTER_ALPHA', 0.15)
+        alpha = 0.15
         gyro_filtered = alpha * gyro + (1 - alpha) * self.offset.update(gyro)
         
         # Apply Madgwick filter without magnetometer
@@ -135,27 +135,7 @@ class IMUReader:
             "angular_velocity": self.angular_velocity
         }
         
-    def set_gain(self, gain):
-        """
-        Update the Madgwick filter gain parameter.
-        
-        Args:
-            gain: New filter gain (0 < gain < 1)
-        """
-        if 0 < gain < 1:
-            self.ahrs.settings.gain = gain
-            
-            # Save to config
-            self.config = load_config()
-            self.config['IMU_FILTER_GAIN'] = gain
-            save_config(self.config)
-            
-            print(f"Madgwick filter gain set to {gain:.2f} and saved to config")
-            return True
-        else:
-            print(f"Invalid gain value: {gain}. Must be between 0 and 1.")
-            return False
-
+   
 
 # Example usage
 if __name__ == "__main__":
