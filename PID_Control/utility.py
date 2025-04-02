@@ -335,13 +335,26 @@ def calibrate_imu(imu):
         raw_data = imu.imu.acceleration, imu.imu.gyro
         accel, gyro = raw_data
         
+        # Convert gyro data from rad/s to deg/s
+        gyro_deg = np.array(gyro) * (180 / np.pi)
+        
+        # Apply orientation correction if upside down - BEFORE collecting samples
+        if imu.upside_down:
+            accel = list(accel)  # Convert to list so we can modify it
+            gyro_deg = list(gyro_deg)  # Convert to list so we can modify it
+            
+            # Apply the same transformations as in the IMU_reader class
+            accel[1] = -accel[1]
+            accel[2] = -accel[2]
+            gyro_deg[1] = -gyro_deg[1]
+            gyro_deg[2] = -gyro_deg[2]
+        
         # Add samples to our lists
         accel_samples_x.append(accel[0])
         accel_samples_y.append(accel[1])
         accel_samples_z.append(accel[2])
         
-        # Convert gyro data from rad/s to deg/s
-        gyro_deg = np.array(gyro) * (180 / np.pi)
+        # Add transformed gyro samples to our lists
         gyro_samples_x.append(gyro_deg[0])
         gyro_samples_y.append(gyro_deg[1])
         gyro_samples_z.append(gyro_deg[2])
@@ -362,13 +375,13 @@ def calibrate_imu(imu):
     print("\nCalibration data collected!")
     
     # Calculate offsets based on averages
-    accel_offset_x = np.mean(accel_samples_x)
-    accel_offset_y = np.mean(accel_samples_y)
-    accel_offset_z = np.mean(accel_samples_z) - 9.81  # Subtract gravity
+    accel_offset_x = float(np.mean(accel_samples_x))
+    accel_offset_y = float(np.mean(accel_samples_y))
+    accel_offset_z = float(np.mean(accel_samples_z) - 9.81)  # Subtract gravity
     
-    gyro_offset_x = np.mean(gyro_samples_x)
-    gyro_offset_y = np.mean(gyro_samples_y)
-    gyro_offset_z = np.mean(gyro_samples_z)
+    gyro_offset_x = float(np.mean(gyro_samples_x))
+    gyro_offset_y = float(np.mean(gyro_samples_y))
+    gyro_offset_z = float(np.mean(gyro_samples_z))
     
     # Display results
     print("\nCalibration Results:")
@@ -382,20 +395,44 @@ def calibrate_imu(imu):
         print("Calibration cancelled. Values not saved.")
         return False
     
-    # Create arrays for the CONFIG dictionary
+    # Create regular Python lists with explicit float conversion
     accel_offset = [float(accel_offset_x), float(accel_offset_y), float(accel_offset_z)]
     gyro_offset = [float(gyro_offset_x), float(gyro_offset_y), float(gyro_offset_z)]
     
+    # Debug output to verify the types
+    print(f"accel_offset type: {type(accel_offset)}, values: {accel_offset}")
+    print(f"gyro_offset type: {type(gyro_offset)}, values: {gyro_offset}")
+    
     # Save directly to CONFIG
-    CONFIG['IMU_ACCEL_OFFSET'] = accel_offset
-    CONFIG['IMU_GYRO_OFFSET'] = gyro_offset
-    CONFIG['IMU_UPSIDE_DOWN'] = imu.upside_down
-    
-    
-    # Save CONFIG
-    save_config(CONFIG)
-    
-    print("\nCalibration values saved successfully to config!")
-    print("Please restart the program for the new calibration to take effect.")
-    
-    return True
+    try:
+        # Get a fresh copy of CONFIG to avoid any stale data
+        fresh_config = load_config()
+        fresh_config['IMU_ACCEL_OFFSET'] = accel_offset
+        fresh_config['IMU_GYRO_OFFSET'] = gyro_offset
+        fresh_config['IMU_UPSIDE_DOWN'] = bool(imu.upside_down)  # Ensure it's a proper boolean
+        
+        # Save CONFIG
+        save_config(fresh_config)
+        
+        # Verify the save worked by reading back the config
+        verify_config = load_config()
+        saved_accel = verify_config.get('IMU_ACCEL_OFFSET')
+        saved_gyro = verify_config.get('IMU_GYRO_OFFSET')
+        
+        print("\nVerification:")
+        print(f"Accel offsets saved: {saved_accel}")
+        print(f"Gyro offsets saved: {saved_gyro}")
+        
+        if saved_accel and saved_gyro:
+            print("\nCalibration values saved successfully to config!")
+            print("Please restart the program for the new calibration to take effect.")
+            return True
+        else:
+            print("\nWarning: Calibration values may not have been saved correctly.")
+            return False
+            
+    except Exception as e:
+        print(f"\nError saving calibration: {e}")
+        print("Check permissions on the config file and ensure it's writable.")
+        return False
+ 
