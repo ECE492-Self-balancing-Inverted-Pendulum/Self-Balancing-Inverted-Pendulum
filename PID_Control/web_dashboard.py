@@ -12,6 +12,7 @@ import os
 import json
 import threading
 import time
+import numpy as np
 from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO
 from config import load_config, save_config
@@ -36,6 +37,22 @@ latest_data = {
 # Flag to track if the server is running
 server_running = False
 server_thread = None
+
+# Helper function to convert NumPy values to Python types
+def convert_numpy_to_python(obj):
+    """Convert NumPy types to standard Python types for JSON serialization."""
+    if isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_to_python(v) for k, v in obj.items()}
+    elif isinstance(obj, list) or isinstance(obj, tuple):
+        return [convert_numpy_to_python(i) for i in obj]
+    else:
+        return obj
 
 # HTML template with JavaScript for the dashboard
 HTML_TEMPLATE = """
@@ -562,10 +579,11 @@ def index():
                                  target_angle=config.get('SETPOINT', 0))
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     """Handle client connection."""
     # Send current data to newly connected client
-    socketio.emit('update_data', latest_data, to=request.sid)
+    data_to_send = convert_numpy_to_python(latest_data)
+    socketio.emit('update_data', data_to_send, to=request.sid)
     
     # Also send current PID parameters
     config = load_config()
@@ -578,7 +596,8 @@ def handle_connect():
 @socketio.on('request_initial_data')
 def handle_initial_data_request():
     """Send initial data when requested by client."""
-    socketio.emit('update_data', latest_data)
+    data_to_send = convert_numpy_to_python(latest_data)
+    socketio.emit('update_data', data_to_send)
 
 @socketio.on('update_pid')
 def handle_pid_update(data):
@@ -633,7 +652,8 @@ def send_data():
     # Initial data point
     initial_config = load_config()
     latest_data['target_angle'] = initial_config.get('SETPOINT', 0.0)
-    socketio.emit('update_data', latest_data)
+    data_to_send = convert_numpy_to_python(latest_data)
+    socketio.emit('update_data', data_to_send)
     
     while server_running:
         try:
@@ -641,8 +661,11 @@ def send_data():
             config = load_config()
             latest_data['target_angle'] = config.get('SETPOINT', 0.0)
             
+            # Convert any NumPy types to standard Python types for JSON serialization
+            data_to_send = convert_numpy_to_python(latest_data)
+            
             # Send latest data to all clients
-            socketio.emit('update_data', latest_data)
+            socketio.emit('update_data', data_to_send)
             
             # Sleep briefly
             time.sleep(0.1)  # 10Hz update rate
@@ -710,15 +733,20 @@ def update_angle_data(roll, output, angular_velocity=0):
     # Get PID components from PIDController if available
     config = load_config()
     
+    # Convert any NumPy types to standard Python types
+    roll = float(roll) if roll is not None else 0.0
+    output = float(output) if output is not None else 0.0
+    angular_velocity = float(angular_velocity) if angular_velocity is not None else 0.0
+    
     # Update latest data
     latest_data.update({
-        'timestamp': time.time(),
-        'angle': float(roll),
-        'output': float(output),
+        'timestamp': float(time.time()),
+        'angle': roll,
+        'output': output,
         'pid': {
-            'p_term': config.get('P_GAIN', 0) * roll,  # Approximate P term
-            'i_term': 0,  # We don't have access to I term directly
-            'd_term': config.get('D_GAIN', 0) * angular_velocity  # Approximate D term
+            'p_term': float(config.get('P_GAIN', 0) * roll),  # Approximate P term
+            'i_term': 0.0,  # We don't have access to I term directly
+            'd_term': float(config.get('D_GAIN', 0) * angular_velocity)  # Approximate D term
         }
     })
 
