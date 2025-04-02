@@ -13,9 +13,10 @@ import json
 import threading
 import time
 import numpy as np
+import copy
 from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO
-from config import load_config, save_config
+from config import load_config, save_config, DEFAULT_CONFIG
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -38,6 +39,9 @@ latest_data = {
 server_running = False
 server_thread = None
 
+# Use a lock for config file operations to prevent corruption
+config_lock = threading.Lock()
+
 # Helper function to convert NumPy values to Python types
 def convert_numpy_to_python(obj):
     """Convert NumPy types to standard Python types for JSON serialization."""
@@ -53,6 +57,26 @@ def convert_numpy_to_python(obj):
         return [convert_numpy_to_python(i) for i in obj]
     else:
         return obj
+
+# Safe config loading/saving functions
+def safe_load_config():
+    """Thread-safe config loading with fallback"""
+    with config_lock:
+        try:
+            return load_config()
+        except Exception as e:
+            print(f"Error loading config: {e}")
+            return copy.deepcopy(DEFAULT_CONFIG)
+
+def safe_save_config(config):
+    """Thread-safe config saving"""
+    with config_lock:
+        try:
+            save_config(config)
+            return True
+        except Exception as e:
+            print(f"Error saving config: {e}")
+            return False
 
 # HTML template with JavaScript for the dashboard
 HTML_TEMPLATE = """
@@ -102,7 +126,7 @@ HTML_TEMPLATE = """
             padding: 20px;
             margin-bottom: 20px;
             width: 100%;
-            height: 350px;
+            height: 400px; /* Increased height by 15% */
         }
         .pid-chart-container {
             background-color: white;
@@ -111,7 +135,7 @@ HTML_TEMPLATE = """
             padding: 20px;
             margin-bottom: 20px;
             width: 100%;
-            height: 300px;
+            height: 350px; /* Increased height by 15% */
         }
         h2 {
             color: #555;
@@ -123,12 +147,14 @@ HTML_TEMPLATE = """
         .chart-controls {
             text-align: center;
             margin-top: 15px;
+            margin-bottom: 40px; /* Added space between charts and controls */
         }
         .control-panel {
             display: grid;
             grid-template-columns: 1fr;
             gap: 20px;
             margin-bottom: 20px;
+            margin-top: 40px; /* Moved controls lower */
         }
         @media (min-width: 768px) {
             .control-panel {
@@ -161,38 +187,74 @@ HTML_TEMPLATE = """
             margin-bottom: 15px;
             font-size: 18px;
         }
-        .target-angle-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
+        /* Joystick style control */
+        .joystick-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+            background-color: #f0f0f0;
+            border-radius: 50%;
+            overflow: hidden;
+            touch-action: none;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.1);
         }
-        .direction-button {
-            flex: 1;
-            margin: 0 5px;
-            padding: 10px;
+        .joystick-knob {
+            position: absolute;
+            width: 80px;
+            height: 80px;
             background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             cursor: pointer;
-            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             transition: background-color 0.2s;
         }
-        .direction-button:hover {
+        .joystick-knob:hover {
             background-color: #0b7dda;
         }
-        #reset-target {
-            background-color: #ff9800;
+        .joystick-center {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #fff;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
         }
-        #reset-target:hover {
-            background-color: #e68a00;
+        .joystick-horizontal-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background-color: rgba(0,0,0,0.1);
+            top: 50%;
+            left: 0;
+        }
+        .joystick-vertical-line {
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background-color: rgba(0,0,0,0.1);
+            left: 50%;
+            top: 0;
+        }
+        .joystick-background {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #ffffff 0%, #e0e0e0 100%);
+            border-radius: 50%;
         }
         .manual-target {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             gap: 10px;
-            margin-top: 15px;
+            margin-top: 20px;
         }
         .manual-target label {
             width: 100%;
@@ -230,6 +292,16 @@ HTML_TEMPLATE = """
         }
         button:hover {
             background: #45a049;
+        }
+        .reset-button {
+            display: block;
+            margin: 10px auto;
+            padding: 8px 20px;
+            background-color: #ff9800;
+            color: white;
+        }
+        .reset-button:hover {
+            background-color: #e68a00;
         }
         footer {
             text-align: center;
@@ -291,11 +363,18 @@ HTML_TEMPLATE = """
             <div class="target-angle-display">
                 <span>Current Target Angle: <span id="current-target">{{ target_angle }}</span>°</span>
             </div>
-            <div class="target-angle-buttons">
-                <button id="forward" class="direction-button">Forward</button>
-                <button id="reset-target" class="direction-button">Reset</button>
-                <button id="backward" class="direction-button">Backward</button>
+            
+            <!-- Joystick control for direction -->
+            <div class="joystick-container" id="joystick">
+                <div class="joystick-background"></div>
+                <div class="joystick-horizontal-line"></div>
+                <div class="joystick-vertical-line"></div>
+                <div class="joystick-knob" id="joystick-knob"></div>
+                <div class="joystick-center"></div>
             </div>
+            
+            <button id="reset-target" class="reset-button">Reset Target Angle</button>
+            
             <div class="manual-target">
                 <label for="target-angle">Set Target Angle:</label>
                 <input type="number" id="target-angle" value="{{ target_angle }}" step="0.5" min="-10" max="10">
@@ -328,6 +407,10 @@ HTML_TEMPLATE = """
         // Initialize time counter
         let timeCounter = 0;
         
+        // Throttle control to prevent too many updates
+        let lastTargetUpdate = 0;
+        const TARGET_UPDATE_INTERVAL = 100; // ms
+        
         // Connection status management
         socket.on('connect', function() {
             document.getElementById('connection-status').textContent = 'Connected';
@@ -352,7 +435,8 @@ HTML_TEMPLATE = """
                         borderColor: 'rgb(75, 192, 192)',
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.2
+                        tension: 0.4, // Increased for smoother curves
+                        pointRadius: 0 // No points, just lines
                     },
                     {
                         label: 'Target Angle',
@@ -361,7 +445,9 @@ HTML_TEMPLATE = """
                         borderWidth: 2,
                         borderDash: [5, 5],
                         fill: false,
-                        tension: 0
+                        tension: 0,
+                        pointRadius: 0, // No points, just lines
+                        spanGaps: true // Connect the line across any null values
                     },
                     {
                         label: 'PID Output',
@@ -369,7 +455,8 @@ HTML_TEMPLATE = """
                         borderColor: 'rgb(255, 159, 64)',
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.2
+                        tension: 0.4, // Increased for smoother curves
+                        pointRadius: 0 // No points, just lines
                     }
                 ]
             },
@@ -391,7 +478,7 @@ HTML_TEMPLATE = """
                     }
                 },
                 animation: {
-                    duration: 0
+                    duration: 0 // No animation for real-time updates
                 },
                 plugins: {
                     zoom: {
@@ -426,7 +513,8 @@ HTML_TEMPLATE = """
                         borderColor: 'rgb(255, 99, 132)',
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.1
+                        tension: 0.3, // Smoother curves
+                        pointRadius: 0 // No points
                     },
                     {
                         label: 'I Term',
@@ -434,7 +522,8 @@ HTML_TEMPLATE = """
                         borderColor: 'rgb(54, 162, 235)',
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.1
+                        tension: 0.3, // Smoother curves
+                        pointRadius: 0 // No points
                     },
                     {
                         label: 'D Term',
@@ -442,7 +531,8 @@ HTML_TEMPLATE = """
                         borderColor: 'rgb(255, 206, 86)',
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.1
+                        tension: 0.3, // Smoother curves
+                        pointRadius: 0 // No points
                     }
                 ]
             },
@@ -464,7 +554,7 @@ HTML_TEMPLATE = """
                     }
                 },
                 animation: {
-                    duration: 0
+                    duration: 0 // No animation for real-time updates
                 }
             }
         });
@@ -480,27 +570,130 @@ HTML_TEMPLATE = """
             const iGain = parseFloat(document.getElementById('i-gain').value);
             const dGain = parseFloat(document.getElementById('d-gain').value);
             
+            // Disable the button during update
+            const button = document.getElementById('update-pid');
+            button.disabled = true;
+            button.textContent = 'Updating...';
+            
             // Send PID parameter update to server
             socket.emit('update_pid', {
                 p_gain: pGain,
                 i_gain: iGain,
                 d_gain: dGain
+            }, function(response) {
+                // Re-enable button with feedback
+                button.disabled = false;
+                if (response && response.success) {
+                    button.textContent = 'Updated!';
+                    setTimeout(() => {
+                        button.textContent = 'Update PID Parameters';
+                    }, 1500);
+                } else {
+                    button.textContent = 'Update Failed';
+                    setTimeout(() => {
+                        button.textContent = 'Update PID Parameters';
+                    }, 1500);
+                }
             });
         });
         
-        // Target angle control buttons
-        document.getElementById('forward').addEventListener('click', function() {
-            const currentTarget = parseFloat(document.getElementById('current-target').textContent);
-            const newTarget = Math.min(currentTarget + 1, 10);
-            updateTargetAngle(newTarget);
-        });
+        // Joystick control
+        const joystick = document.getElementById('joystick');
+        const knob = document.getElementById('joystick-knob');
+        let isDragging = false;
+        let centerX = joystick.offsetWidth / 2;
+        let centerY = joystick.offsetHeight / 2;
+        const radius = joystick.offsetWidth / 2 - knob.offsetWidth / 2;
         
-        document.getElementById('backward').addEventListener('click', function() {
-            const currentTarget = parseFloat(document.getElementById('current-target').textContent);
-            const newTarget = Math.max(currentTarget - 1, -10);
-            updateTargetAngle(newTarget);
-        });
+        // Initialize knob at center
+        knob.style.left = `${centerX}px`;
+        knob.style.top = `${centerY}px`;
         
+        // Handle joystick events
+        joystick.addEventListener('mousedown', startDrag);
+        joystick.addEventListener('touchstart', startDrag);
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('touchmove', drag);
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('touchend', endDrag);
+        
+        function startDrag(e) {
+            isDragging = true;
+            drag(e);
+        }
+        
+        function drag(e) {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            
+            // Get position
+            let clientX, clientY;
+            if (e.type.startsWith('touch')) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            // Get joystick position
+            const rect = joystick.getBoundingClientRect();
+            const joystickX = clientX - rect.left;
+            const joystickY = clientY - rect.top;
+            
+            // Calculate distance from center
+            const deltaX = joystickX - centerX;
+            const deltaY = joystickY - centerY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Normalize to radius
+            let newX, newY;
+            if (distance > radius) {
+                // Limit to the edge of the joystick
+                const angle = Math.atan2(deltaY, deltaX);
+                newX = centerX + radius * Math.cos(angle);
+                newY = centerY + radius * Math.sin(angle);
+            } else {
+                newX = joystickX;
+                newY = joystickY;
+            }
+            
+            // Update knob position
+            knob.style.left = `${newX}px`;
+            knob.style.top = `${newY}px`;
+            
+            // Calculate angle control value (only using Y-axis)
+            // Normalize to -10 to 10 degrees
+            const normalizedY = ((newY - centerY) / radius) * -10;
+            
+            // Update target angle if enough time has passed
+            const now = Date.now();
+            if (now - lastTargetUpdate > TARGET_UPDATE_INTERVAL) {
+                updateTargetAngle(normalizedY);
+                lastTargetUpdate = now;
+            }
+        }
+        
+        function endDrag() {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            // Animate back to center
+            knob.style.transition = 'left 0.2s, top 0.2s';
+            knob.style.left = `${centerX}px`;
+            knob.style.top = `${centerY}px`;
+            
+            // Reset transition after animation
+            setTimeout(() => {
+                knob.style.transition = '';
+            }, 200);
+            
+            // Reset target angle to 0
+            updateTargetAngle(0);
+        }
+        
+        // Reset target angle button
         document.getElementById('reset-target').addEventListener('click', function() {
             updateTargetAngle(0);
         });
@@ -511,9 +704,18 @@ HTML_TEMPLATE = """
         });
         
         function updateTargetAngle(angle) {
+            // Limit angle to -10 to 10 degrees
+            angle = Math.max(-10, Math.min(10, angle));
+            
+            // Round to 1 decimal place for display
+            const roundedAngle = Math.round(angle * 10) / 10;
+            
+            // Update input field
+            document.getElementById('target-angle').value = roundedAngle.toFixed(1);
+            
             // Send target angle update to server
             socket.emit('update_target_angle', {
-                angle: angle
+                angle: roundedAngle
             });
         }
         
@@ -521,14 +723,18 @@ HTML_TEMPLATE = """
         socket.on('update_data', function(data) {
             // Update target angle display
             document.getElementById('current-target').textContent = data.target_angle.toFixed(1);
-            document.getElementById('target-angle').value = data.target_angle.toFixed(1);
             
             // Add new data to angle chart
-            timeCounter += 0.1;  // Approximate time (10Hz updates)
+            timeCounter += 0.05;  // 20Hz updates (double the previous rate)
             timeData.push(timeCounter.toFixed(1));
             angleData.push(data.angle);
+            
+            // For target, use a fixed value rather than a time series
+            // This creates a straight dotted line across the chart
             targetData.push(data.target_angle);
-            outputData.push(data.output / 10);  // Scale output to fit on same chart
+            
+            // Scale output to fit better with angle scale
+            outputData.push(data.output / 10);
             
             // Add new data to PID components chart
             pidTimeData.push(timeCounter.toFixed(1));
@@ -549,8 +755,8 @@ HTML_TEMPLATE = """
                 dTermData.shift();
             }
             
-            // Update charts
-            angleChart.update('none'); // Use 'none' to disable animations for smoother updates
+            // Update charts without animation for smooth real-time display
+            angleChart.update('none');
             pidChart.update('none');
         });
         
@@ -559,6 +765,14 @@ HTML_TEMPLATE = """
             document.getElementById('p-gain').value = data.p_gain;
             document.getElementById('i-gain').value = data.i_gain;
             document.getElementById('d-gain').value = data.d_gain;
+        });
+        
+        // Handle window resize to update joystick dimensions
+        window.addEventListener('resize', function() {
+            centerX = joystick.offsetWidth / 2;
+            centerY = joystick.offsetHeight / 2;
+            knob.style.left = `${centerX}px`;
+            knob.style.top = `${centerY}px`;
         });
         
         // Send a message to request any available data immediately
@@ -571,7 +785,7 @@ HTML_TEMPLATE = """
 @app.route('/')
 def index():
     """Render the dashboard page."""
-    config = load_config()
+    config = safe_load_config()
     return render_template_string(HTML_TEMPLATE, 
                                  p_gain=config.get('P_GAIN', 0),
                                  i_gain=config.get('I_GAIN', 0),
@@ -586,7 +800,7 @@ def handle_connect(auth=None):
     socketio.emit('update_data', data_to_send, to=request.sid)
     
     # Also send current PID parameters
-    config = load_config()
+    config = safe_load_config()
     socketio.emit('pid_updated', {
         'p_gain': config.get('P_GAIN', 0),
         'i_gain': config.get('I_GAIN', 0),
@@ -604,7 +818,7 @@ def handle_pid_update(data):
     """Handle PID parameter update."""
     try:
         # Update config
-        config = load_config()
+        config = safe_load_config()
         if 'p_gain' in data:
             config['P_GAIN'] = float(data['p_gain'])
         if 'i_gain' in data:
@@ -613,16 +827,17 @@ def handle_pid_update(data):
             config['D_GAIN'] = float(data['d_gain'])
         
         # Save config
-        save_config(config)
+        success = safe_save_config(config)
         
-        # Broadcast the updated parameters to all clients
-        socketio.emit('pid_updated', {
-            'p_gain': config.get('P_GAIN', 0),
-            'i_gain': config.get('I_GAIN', 0),
-            'd_gain': config.get('D_GAIN', 0)
-        })
+        # Broadcast the updated parameters to all clients if saved successfully
+        if success:
+            socketio.emit('pid_updated', {
+                'p_gain': config.get('P_GAIN', 0),
+                'i_gain': config.get('I_GAIN', 0),
+                'd_gain': config.get('D_GAIN', 0)
+            })
         
-        return {'success': True}
+        return {'success': success}
     except Exception as e:
         print(f"Error updating PID parameters: {e}")
         return {'success': False, 'error': str(e)}
@@ -633,9 +848,9 @@ def handle_target_angle_update(data):
     try:
         # Update config
         angle = float(data['angle'])
-        config = load_config()
+        config = safe_load_config()
         config['SETPOINT'] = angle
-        save_config(config)
+        safe_save_config(config)
         
         # Update latest data
         latest_data['target_angle'] = angle
@@ -650,7 +865,7 @@ def send_data():
     global server_running
     
     # Initial data point
-    initial_config = load_config()
+    initial_config = safe_load_config()
     latest_data['target_angle'] = initial_config.get('SETPOINT', 0.0)
     data_to_send = convert_numpy_to_python(latest_data)
     socketio.emit('update_data', data_to_send)
@@ -658,7 +873,7 @@ def send_data():
     while server_running:
         try:
             # Load latest config to get target angle
-            config = load_config()
+            config = safe_load_config()
             latest_data['target_angle'] = config.get('SETPOINT', 0.0)
             
             # Convert any NumPy types to standard Python types for JSON serialization
@@ -667,8 +882,8 @@ def send_data():
             # Send latest data to all clients
             socketio.emit('update_data', data_to_send)
             
-            # Sleep briefly
-            time.sleep(0.1)  # 10Hz update rate
+            # Sleep briefly - doubled rate from 10Hz to 20Hz
+            time.sleep(0.05)  
         except Exception as e:
             print(f"Error in send_data: {e}")
             time.sleep(1)  # Sleep longer on error
@@ -690,7 +905,7 @@ def start_server(host='0.0.0.0', port=8080):
     server_running = True
     
     # Initialize data with current config values
-    config = load_config()
+    config = safe_load_config()
     latest_data['target_angle'] = config.get('SETPOINT', 0.0)
     
     # Start data sending thread
@@ -731,7 +946,7 @@ def update_angle_data(roll, output, angular_velocity=0):
     global latest_data
     
     # Get PID components from PIDController if available
-    config = load_config()
+    config = safe_load_config()
     
     # Convert any NumPy types to standard Python types
     roll = float(roll) if roll is not None else 0.0
@@ -762,7 +977,7 @@ if __name__ == "__main__":
             velocity = random.uniform(-20, 20)
             output = random.uniform(-100, 100)
             update_angle_data(angle, output, velocity)
-            time.sleep(0.2)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         stop_server()
         print("Server stopped") 
