@@ -49,10 +49,10 @@ CONFIG_FILE = 'robot_config.json'
 # Set up hardware configuration for backward compatibility and convenience
 HARDWARE_CONFIG = {
     # Hard-coded pin values - not tunable
-    'MOTOR_A_IN1_PIN': 12,
-    'MOTOR_A_IN2_PIN': 18,
-    'MOTOR_B_IN1_PIN': 13,
-    'MOTOR_B_IN2_PIN': 19,
+    'MOTOR_A_IN1_PIN': 18,
+    'MOTOR_A_IN2_PIN': 12,
+    'MOTOR_B_IN1_PIN': 19,
+    'MOTOR_B_IN2_PIN': 13,
 }
 
 # Default configuration for the self-balancing robot
