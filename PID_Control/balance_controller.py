@@ -189,6 +189,10 @@ class BalanceController:
                 self.motor.stop_motors()
             else:
                 self.motor.stop_motor()
+            
+            # Reset the IMU filter so it reinitializes on next use
+            self.imu.reset_filter()
+            
             print("\nSelf-balancing mode stopped.")
     
     def stop_balancing(self):
@@ -198,4 +202,8 @@ class BalanceController:
             self.motor.stop_motors()
         else:
             self.motor.stop_motor()
+            
+        # Reset the IMU filter so it reinitializes on next use
+        self.imu.reset_filter()
+        
         print("\nMotor stopped. Balance mode exited.")

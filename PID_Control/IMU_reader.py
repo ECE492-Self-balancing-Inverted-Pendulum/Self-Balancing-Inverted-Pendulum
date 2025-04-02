@@ -60,10 +60,24 @@ class IMUReader:
         self.sample_rate = int(1 / sample_time)
         print(f"IMU sampling rate: {self.sample_rate} Hz (from sample time: {sample_time}s)")
         
+        # Flag to track if filter is initialized
+        self._filter_initialized = False
+        
+        # These will be initialized when get_imu_data is first called
+        self.offset = None
+        self.ahrs = None
+        self.roll = 0.0
+        self.angular_velocity = 0.0
+        self.prev_time = None
+    
+    def _initialize_filter(self):
+        """
+        Initialize the filter components. Called on first data request or after reset.
+        """
+        print("Initializing IMU filter...")
         # Initialize filter components
         self.offset = imufusion.Offset(self.sample_rate)
         self.ahrs = imufusion.Ahrs()
-        
         
         self.ahrs.settings = imufusion.Settings(
             imufusion.CONVENTION_NWU,  # North-West-Up convention
@@ -82,8 +96,8 @@ class IMUReader:
         self.roll = 0.0
         self.angular_velocity = 0.0
         
-        # Apply filter once to initialize values
-        self.get_imu_data()
+        # Set flag to indicate filter is initialized
+        self._filter_initialized = True
     
     def get_imu_data(self):
         """
@@ -92,6 +106,10 @@ class IMUReader:
         Returns:
             dict: Dictionary containing 'roll' and 'angular_velocity'
         """
+        # Initialize filter if this is the first call or after reset
+        if not self._filter_initialized:
+            self._initialize_filter()
+        
         # Get time delta
         curr_time = time.time()
         dt = max(curr_time - self.prev_time, 1e-3)
@@ -134,6 +152,13 @@ class IMUReader:
             "roll": self.roll,
             "angular_velocity": self.angular_velocity
         }
+    
+    def reset_filter(self):
+        """
+        Reset the IMU filter. Next call to get_imu_data will reinitialize the filter.
+        """
+        print("Resetting IMU filter...")
+        self._filter_initialized = False
         
     def set_gain(self, gain):
         """
@@ -143,6 +168,10 @@ class IMUReader:
             gain: New filter gain (0 < gain < 1)
         """
         if 0 < gain < 1:
+            # Initialize filter if not already done
+            if not self._filter_initialized:
+                self._initialize_filter()
+                
             self.ahrs.settings.gain = gain
             
             # Save to config
