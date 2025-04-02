@@ -66,7 +66,8 @@ def web_dashboard_mode(balance_controller):
     def dashboard_callback(debug_info):
         roll = debug_info['roll']
         output = debug_info['output']
-        web_dashboard.update_angle_data(roll, output)
+        angular_velocity = debug_info['angular_velocity']
+        web_dashboard.update_angle_data(roll, output, angular_velocity)
     
     try:
         # Start balancing with the dashboard callback
