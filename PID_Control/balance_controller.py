@@ -131,65 +131,58 @@ class BalanceController:
             
             # Main control loop
             while self.running:
-                try:
-                    # Calculate next cycle time first
-                    config = load_config()
-                    sample_time = config.get('SAMPLE_TIME', 0.01)
-                    next_cycle_time = last_time + sample_time
-                    
-                    # Get IMU data and perform control calculations
-                    imu_data = self.imu.get_imu_data()
-                    pitch = imu_data['pitch']  # Use pitch instead of roll
-                    angular_velocity = imu_data['angular_velocity']
-                    
-                    # Calculate PID output
-                    output = self.pid.compute(
-                        current_value=pitch,  # Use pitch for balancing
-                        dt=time.time() - last_time
-                    )
-                    
-                    # Apply the output to the motor(s)
-                    result = self.apply_motor_control(output)
-                    output, motor_speed, direction = result
-                    
-                    # Update timing for next control cycle
-                    last_time = time.time()
-                    
-                    # Handle non-critical operations without affecting sample rate
-                    current_time = time.time()
-                    if current_time - last_print_time >= 0.5:
-                        print(f"\rPitch: {pitch:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}", end='', flush=True)
-                        last_print_time = current_time
-                    
-                    if debug_callback and current_time - last_debug_time >= 0.1:
-                        debug_info = {
-                            'pitch': pitch,
-                            'angular_velocity': angular_velocity,
-                            'output': output,
-                            'motor_output': motor_speed,
-                            'pid': {
-                                'p_gain': config.get('P_GAIN', 0),
-                                'i_gain': config.get('I_GAIN', 0),
-                                'd_gain': config.get('D_GAIN', 0)
-                            }
-                        }
-                        debug_callback(debug_info)
-                        last_debug_time = current_time
-                    
-                    # Sleep precisely until next cycle
-                    sleep_time = next_cycle_time - time.time()
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
+                # Calculate next cycle time first
+                next_cycle_time = last_time + load_config().get('SAMPLE_TIME', 0.01)
                 
-                except Exception as e:
-                    print(f"\nError in control cycle: {e}")
-                    print("Attempting to continue...")
-                    time.sleep(0.1)  # Brief pause before retrying
-                    
+                # Get IMU data and perform control calculations
+                imu_data = self.imu.get_imu_data()
+                roll = imu_data['roll']
+                angular_velocity = imu_data['angular_velocity']
+                
+                # Calculate PID output
+                output = self.pid.compute(
+                    current_value=roll,
+                    dt=time.time() - last_time
+                )
+                
+                # Apply the output to the motor(s)
+                result = self.apply_motor_control(output)
+                output, motor_speed, direction = result
+                
+                # Update timing for next control cycle
+                last_time = time.time()
+                
+                # Handle non-critical operations without affecting sample rate
+                current_time = time.time()
+                if current_time - last_print_time >= 0.5:
+                    print(f"\rRoll: {roll:.2f}° | Angular Vel: {angular_velocity:.2f}°/s | Output: {output:.2f} | Motor: {motor_speed:.2f}% {direction}", end='', flush=True)
+                    last_print_time = current_time
+                
+                if debug_callback and current_time - last_debug_time >= 0.1:
+                    config = load_config()
+                    debug_info = {
+                        'roll': roll,
+                        'angular_velocity': angular_velocity,
+                        'output': output,
+                        'motor_output': motor_speed,
+                        'pid': {
+                            'p_gain': config.get('P_GAIN', 0),
+                            'i_gain': config.get('I_GAIN', 0),
+                            'd_gain': config.get('D_GAIN', 0)
+                        }
+                    }
+                    debug_callback(debug_info)
+                    last_debug_time = current_time
+                
+                # Sleep precisely until next cycle
+                sleep_time = next_cycle_time - time.time()
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+            
         except KeyboardInterrupt:
             print("\nBalancing stopped by user (Ctrl+C)")
         except Exception as e:
-            print(f"\nFatal error in balancing loop: {e}")
+            print(f"\nError in balancing loop: {e}")
         finally:
             # Make sure motors are stopped
             if self.using_dual_motors:

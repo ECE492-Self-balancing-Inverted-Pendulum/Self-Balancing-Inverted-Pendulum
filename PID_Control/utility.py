@@ -27,170 +27,42 @@ except ImportError:
 
 def imu_tuning_mode(imu):
     """
-    Interactive mode for tuning IMU responsiveness.
-    Displays IMU data on a single line and allows adjusting the Madgwick filter gain.
+    Simple mode to display IMU readings in the terminal.
+    Press Ctrl+C to exit.
     
     Args:
-        imu: IMUReader instance to tune
-    
-    Controls:
-        +: Increase gain (more responsive)
-        -: Decrease gain (smoother)
-        r: Reset to default (0.8)
-        t: Toggle IMU upside-down setting
-        a: Set alpha value for pre-filter (0.05-0.95)
-        q: Exit tuning mode
-    
-    Example:
-        from utility import imu_tuning_mode
-        from IMU_reader import IMUReader
-        
-        imu = IMUReader()
-        imu_tuning_mode(imu)
+        imu: IMU reader instance
     """
-    print("\nIMU Tuning Mode")
-    print("------------------")
-    print("This mode allows you to adjust the IMU filter settings")
-    print("to find the right balance between responsiveness and stability.")
+    print("\nIMU Reading Mode")
+    print("-----------------")
+    print("Displaying live IMU readings. Press Ctrl+C to exit.")
+    print()
     
-    # Get current gain value
-    current_gain = imu.ahrs.settings.gain
-    
-    print("\nCurrent filter gain:", current_gain)
-    print("Higher gain = more responsive but may be less stable")
-    print("Lower gain = more stable but slower to respond")
-    print("\nCommands:")
-    print("+: Increase gain by 0.05 (more responsive)")
-    print("-: Decrease gain by 0.05 (smoother)")
-    print("r: Reset to default (0.8)")
-    print("t: Toggle IMU upside-down setting")
-    print("a: Set alpha value for pre-filter (currently 0.15)")
-    print("q: Exit IMU tuning mode")
-    print("\nPress any key at any time to use a command.")
-    
-    # Save terminal settings to restore later
-    old_settings = termios.tcgetattr(sys.stdin)
     try:
-        # Set terminal to raw mode
-        tty.setraw(sys.stdin.fileno())
-        
-        running = True
-        while running:
+        while True:
             try:
-                # Get IMU data with error handling
-                imu_data = imu.get_imu_data()
-                roll = imu_data['roll']
-                pitch = imu_data['pitch']
-                angular_velocity = imu_data['angular_velocity']
+                # Get IMU data
+                data = imu.get_imu_data()
+                roll = data.get('roll', 0)
+                pitch = data.get('pitch', 0)  # Try to get pitch if available
+                angular_velocity = data.get('angular_velocity', 0)
                 
-                # Get current gain value
-                current_gain = imu.ahrs.settings.gain
+                # Print on a single line with carriage return
+                output = f"\rRoll: {roll:+6.2f}° | "
+                if 'pitch' in data:
+                    output += f"Pitch: {pitch:+6.2f}° | "
+                output += f"Angular Velocity: {angular_velocity:+6.2f}°/s"
                 
-                # Print data on the same line using \r
-                sys.stdout.write(f"\rRoll: {roll:+6.2f}° | Pitch: {pitch:+6.2f}° | Angular Vel: {angular_velocity:+6.2f}°/s | Gain: {current_gain:.2f} | Upside-down: {imu.upside_down}")
-                sys.stdout.flush()
+                print(output, end='', flush=True)
+                
             except Exception as e:
-                # Handle any IMU read errors gracefully
-                sys.stdout.write(f"\rError reading IMU: {e}")
-                sys.stdout.flush()
-                time.sleep(1)  # Wait a bit before retrying
-                continue
+                print(f"\rIMU read error: {e}", end='', flush=True)
             
-            # Check if there's any input without blocking
-            if select.select([sys.stdin], [], [], 0.1)[0]:
-                # Read a single character
-                user_input = sys.stdin.read(1)
-                
-                if user_input == 'q':
-                    sys.stdout.write("\nExiting IMU tuning mode.")
-                    sys.stdout.flush()
-                    running = False
-                
-                elif user_input == '+':
-                    new_gain = min(current_gain + 0.05, 0.95)
-                    try:
-                        imu.set_gain(new_gain)
-                        sys.stdout.write(f"\nIncreased gain to {new_gain:.2f}")
-                    except Exception as e:
-                        sys.stdout.write(f"\nError setting gain: {e}")
-                    sys.stdout.flush()
-                
-                elif user_input == '-':
-                    new_gain = max(current_gain - 0.05, 0.05)
-                    try:
-                        imu.set_gain(new_gain)
-                        sys.stdout.write(f"\nDecreased gain to {new_gain:.2f}")
-                    except Exception as e:
-                        sys.stdout.write(f"\nError setting gain: {e}")
-                    sys.stdout.flush()
-                
-                elif user_input == 'r':
-                    default_gain = 0.8  # Default gain value
-                    try:
-                        imu.set_gain(default_gain)
-                        sys.stdout.write(f"\nReset gain to default ({default_gain:.2f})")
-                    except Exception as e:
-                        sys.stdout.write(f"\nError setting gain: {e}")
-                    sys.stdout.flush()
-                
-                elif user_input == 't':
-                    # Toggle the upside-down setting
-                    try:
-                        imu.upside_down = not imu.upside_down
-                        
-                        # Update config
-                        config = load_config()
-                        config['IMU_UPSIDE_DOWN'] = imu.upside_down
-                        save_config(config)
-                        
-                        sys.stdout.write(f"\nToggled IMU orientation. Upside-down: {imu.upside_down}")
-                    except Exception as e:
-                        sys.stdout.write(f"\nError toggling upside down: {e}")
-                    sys.stdout.flush()
-                
-                elif user_input == 'a':
-                    # Set alpha value for pre-filter
-                    sys.stdout.write("\nEnter alpha value (0.05-0.95): ")
-                    sys.stdout.flush()
-                    
-                    # Exit raw mode temporarily to get input
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-                    try:
-                        alpha_input = input().strip()
-                        alpha_value = float(alpha_input)
-                        
-                        if 0.05 <= alpha_value <= 0.95:
-                            # Save to config
-                            config = load_config()
-                            config['IMU_FILTER_ALPHA'] = alpha_value
-                            save_config(config)
-                            sys.stdout.write(f"\nSet alpha to {alpha_value:.2f} (restart required to apply)")
-                        else:
-                            sys.stdout.write("\nInvalid alpha value. Must be between 0.05 and 0.95.")
-                    except ValueError:
-                        sys.stdout.write("\nInvalid input. Please enter a number.")
-                    except Exception as e:
-                        sys.stdout.write(f"\nError setting alpha: {e}")
-                    
-                    # Return to raw mode
-                    tty.setraw(sys.stdin.fileno())
-                    sys.stdout.flush()
-                
-                # Clear line after key press
-                time.sleep(0.5)
-                
-            else:
-                # Small delay if no input
-                time.sleep(0.05)
-    
+            # Simple delay
+            time.sleep(0.1)
+            
     except KeyboardInterrupt:
-        sys.stdout.write("\nIMU tuning mode interrupted.")
-        sys.stdout.flush()
-    
-    finally:
-        # Restore terminal settings
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        print("\nIMU tuning mode exited.")
+        print("\n\nIMU reading mode exited.")
 
 
 def motor_test_mode(motor):

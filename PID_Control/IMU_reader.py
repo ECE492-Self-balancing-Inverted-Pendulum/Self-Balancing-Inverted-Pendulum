@@ -90,7 +90,7 @@ class IMUReader:
         Get filtered IMU data.
         
         Returns:
-            dict: Dictionary containing 'roll', 'pitch', and 'angular_velocity'
+            dict: Dictionary containing 'roll' and 'angular_velocity'
         """
         # Get time delta
         curr_time = time.time()
