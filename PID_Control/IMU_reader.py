@@ -90,7 +90,7 @@ class IMUReader:
         Get filtered IMU data.
         
         Returns:
-            dict: Dictionary containing 'roll' and 'angular_velocity'
+            dict: Dictionary containing 'roll', 'pitch', and 'angular_velocity'
         """
         # Get time delta
         curr_time = time.time()
@@ -135,7 +135,27 @@ class IMUReader:
             "angular_velocity": self.angular_velocity
         }
         
-   
+    def set_gain(self, gain):
+        """
+        Update the Madgwick filter gain parameter.
+        
+        Args:
+            gain: New filter gain (0 < gain < 1)
+        """
+        if 0 < gain < 1:
+            self.ahrs.settings.gain = gain
+            
+            # Save to config
+            self.config = load_config()
+            self.config['IMU_FILTER_GAIN'] = gain
+            save_config(self.config)
+            
+            print(f"Madgwick filter gain set to {gain:.2f} and saved to config")
+            return True
+        else:
+            print(f"Invalid gain value: {gain}. Must be between 0 and 1.")
+            return False
+
 
 # Example usage
 if __name__ == "__main__":
