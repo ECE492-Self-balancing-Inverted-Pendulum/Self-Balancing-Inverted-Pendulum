@@ -73,9 +73,11 @@ def safe_save_config(config):
     with config_lock:
         try:
             save_config(config)
+            print(f"✅ PID parameters updated and saved: P={config.get('P_GAIN')}, I={config.get('I_GAIN')}, D={config.get('D_GAIN')}")
             return True
         except Exception as e:
-            print(f"Error saving config: {e}")
+            print(f"❌ Error saving config: {e}, Type: {type(e)}, File: {CONFIG_FILE}")
+            print(f"Config data attempted to save: {config}")
             return False
 
 # HTML template with JavaScript for the dashboard
@@ -318,6 +320,26 @@ HTML_TEMPLATE = """
             padding-bottom: 10px;
             border-bottom: 1px solid #e0e0e0;
         }
+        /* Add notification styles */
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .success-notification {
+            background-color: #4CAF50;
+        }
+        .error-notification {
+            background-color: #f44336;
+        }
     </style>
 </head>
 <body>
@@ -325,6 +347,9 @@ HTML_TEMPLATE = """
         <h1>PID Controller Dashboard</h1>
         <div class="status">Status: <span id="connection-status" class="status-indicator">Connected</span></div>
     </header>
+    
+    <!-- Add notification element -->
+    <div id="notification" class="notification"></div>
     
     <div class="chart-container">
         <h2>Angle Data</h2>
@@ -388,8 +413,26 @@ HTML_TEMPLATE = """
     </footer>
     
     <script>
-        // Connect to Socket.IO server
-        const socket = io();
+        // Add notification function
+        function showNotification(message, isSuccess) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification ' + (isSuccess ? 'success-notification' : 'error-notification');
+            notification.style.opacity = 1;
+            
+            setTimeout(() => {
+                notification.style.opacity = 0;
+            }, 3000);
+        }
+
+        // Connect to Socket.IO server with reconnection options
+        const socket = io({
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000
+        });
         
         // Data arrays for angle chart
         const maxDataPoints = 100;
@@ -415,11 +458,25 @@ HTML_TEMPLATE = """
         socket.on('connect', function() {
             document.getElementById('connection-status').textContent = 'Connected';
             document.getElementById('connection-status').style.backgroundColor = '#4CAF50';
+            showNotification('Connected to server', true);
         });
         
         socket.on('disconnect', function() {
             document.getElementById('connection-status').textContent = 'Disconnected';
             document.getElementById('connection-status').style.backgroundColor = '#f44336';
+            showNotification('Disconnected from server - attempting to reconnect...', false);
+        });
+        
+        socket.on('reconnect', function(attemptNumber) {
+            showNotification('Reconnected to server after ' + attemptNumber + ' attempts', true);
+        });
+        
+        socket.on('reconnect_failed', function() {
+            showNotification('Failed to reconnect to server after multiple attempts', false);
+        });
+        
+        socket.on('error', function(error) {
+            showNotification('Connection error: ' + error, false);
         });
         
         // Create angle chart
@@ -533,6 +590,17 @@ HTML_TEMPLATE = """
                         fill: false,
                         tension: 0.3, // Smoother curves
                         pointRadius: 0 // No points
+                    },
+                    {
+                        label: 'Zero Line',
+                        data: Array(pidTimeData.length).fill(0), // Create an array of zeros
+                        borderColor: 'rgba(100, 100, 100, 0.5)', // Gray, semi-transparent
+                        borderWidth: 1,
+                        borderDash: [5, 5], // Dotted line
+                        fill: false,
+                        tension: 0,
+                        pointRadius: 0,
+                        order: 4 // Draw below other datasets
                     }
                 ]
             },
@@ -550,6 +618,16 @@ HTML_TEMPLATE = """
                         title: {
                             display: true,
                             text: 'PID Terms'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            filter: function(item, chart) {
+                                // Don't show Zero Line in legend
+                                return item.text !== 'Zero Line';
+                            }
                         }
                     }
                 },
@@ -585,11 +663,13 @@ HTML_TEMPLATE = """
                 button.disabled = false;
                 if (response && response.success) {
                     button.textContent = 'Updated!';
+                    showNotification('PID Parameters Updated Successfully!', true);
                     setTimeout(() => {
                         button.textContent = 'Update PID Parameters';
                     }, 1500);
                 } else {
                     button.textContent = 'Update Failed';
+                    showNotification('Failed to update PID parameters: ' + (response && response.error ? response.error : 'Unknown error'), false);
                     setTimeout(() => {
                         button.textContent = 'Update PID Parameters';
                     }, 1500);
@@ -716,6 +796,12 @@ HTML_TEMPLATE = """
             // Send target angle update to server
             socket.emit('update_target_angle', {
                 angle: roundedAngle
+            }, function(response) {
+                if (response && response.success) {
+                    showNotification('Target angle updated to ' + roundedAngle.toFixed(1) + '°', true);
+                } else {
+                    showNotification('Failed to update target angle: ' + (response && response.error ? response.error : 'Unknown error'), false);
+                }
             });
         }
         
@@ -742,6 +828,11 @@ HTML_TEMPLATE = """
             iTermData.push(data.pid.i_term);
             dTermData.push(data.pid.d_term);
             
+            // Ensure zero line dataset has same number of points
+            if (pidChart.data.datasets[3]) {
+                pidChart.data.datasets[3].data.push(0);
+            }
+            
             // Remove old data if we have too many points
             if (timeData.length > maxDataPoints) {
                 timeData.shift();
@@ -753,6 +844,11 @@ HTML_TEMPLATE = """
                 pTermData.shift();
                 iTermData.shift();
                 dTermData.shift();
+                
+                // Keep zero line dataset in sync
+                if (pidChart.data.datasets[3]) {
+                    pidChart.data.datasets[3].data.shift();
+                }
             }
             
             // Update charts without animation for smooth real-time display
@@ -786,11 +882,15 @@ HTML_TEMPLATE = """
 def index():
     """Render the dashboard page."""
     config = safe_load_config()
+    
+    # Use target_angle if it exists, otherwise fall back to SETPOINT
+    target_angle = config.get('target_angle', config.get('SETPOINT', 0))
+    
     return render_template_string(HTML_TEMPLATE, 
                                  p_gain=config.get('P_GAIN', 0),
                                  i_gain=config.get('I_GAIN', 0),
                                  d_gain=config.get('D_GAIN', 0),
-                                 target_angle=config.get('SETPOINT', 0))
+                                 target_angle=target_angle)
 
 @socketio.on('connect')
 def handle_connect(auth=None):
@@ -817,14 +917,21 @@ def handle_initial_data_request():
 def handle_pid_update(data):
     """Handle PID parameter update."""
     try:
+        # Print received data for debugging
+        print(f"Received PID update request: {data}")
+        
         # Update config
         config = safe_load_config()
+        print(f"Current config before update: P={config.get('P_GAIN')}, I={config.get('I_GAIN')}, D={config.get('D_GAIN')}")
+        
         if 'p_gain' in data:
             config['P_GAIN'] = float(data['p_gain'])
         if 'i_gain' in data:
             config['I_GAIN'] = float(data['i_gain'])
         if 'd_gain' in data:
             config['D_GAIN'] = float(data['d_gain'])
+        
+        print(f"Updated config values: P={config.get('P_GAIN')}, I={config.get('I_GAIN')}, D={config.get('D_GAIN')}")
         
         # Save config
         success = safe_save_config(config)
@@ -836,10 +943,15 @@ def handle_pid_update(data):
                 'i_gain': config.get('I_GAIN', 0),
                 'd_gain': config.get('D_GAIN', 0)
             })
+            print("PID parameters successfully broadcast to all clients")
+        else:
+            print("Failed to save PID parameters - configuration not updated")
         
         return {'success': success}
     except Exception as e:
-        print(f"Error updating PID parameters: {e}")
+        print(f"❌ Error updating PID parameters: {e}, Type: {type(e)}")
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
 @socketio.on('update_target_angle')
@@ -849,15 +961,23 @@ def handle_target_angle_update(data):
         # Update config
         angle = float(data['angle'])
         config = safe_load_config()
-        config['SETPOINT'] = angle
-        safe_save_config(config)
+        # Use target_angle instead of SETPOINT to match the config file
+        config['target_angle'] = angle
+        success = safe_save_config(config)
         
         # Update latest data
         latest_data['target_angle'] = angle
         
-        return {'success': True}
+        if success:
+            print(f"✅ Target angle updated to: {angle}")
+            return {'success': True}
+        else:
+            print(f"❌ Failed to update target angle to: {angle}")
+            return {'success': False, 'error': 'Failed to save configuration'}
     except Exception as e:
-        print(f"Error updating target angle: {e}")
+        print(f"❌ Error updating target angle: {e}, Type: {type(e)}")
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
 def send_data():
@@ -866,7 +986,7 @@ def send_data():
     
     # Initial data point
     initial_config = safe_load_config()
-    latest_data['target_angle'] = initial_config.get('SETPOINT', 0.0)
+    latest_data['target_angle'] = initial_config.get('target_angle', 0.0)  # Use target_angle instead of SETPOINT
     data_to_send = convert_numpy_to_python(latest_data)
     socketio.emit('update_data', data_to_send)
     
@@ -874,7 +994,7 @@ def send_data():
         try:
             # Load latest config to get target angle
             config = safe_load_config()
-            latest_data['target_angle'] = config.get('SETPOINT', 0.0)
+            latest_data['target_angle'] = config.get('target_angle', 0.0)  # Use target_angle instead of SETPOINT
             
             # Convert any NumPy types to standard Python types for JSON serialization
             data_to_send = convert_numpy_to_python(latest_data)
@@ -882,10 +1002,10 @@ def send_data():
             # Send latest data to all clients
             socketio.emit('update_data', data_to_send)
             
-            # Sleep briefly - doubled rate from 10Hz to 20Hz
+            # Sleep briefly
             time.sleep(0.05)  
         except Exception as e:
-            print(f"Error in send_data: {e}")
+            print(f"❌ Error in send_data: {e}, Type: {type(e)}")
             time.sleep(1)  # Sleep longer on error
 
 def start_server(host='0.0.0.0', port=8080):
@@ -906,7 +1026,7 @@ def start_server(host='0.0.0.0', port=8080):
     
     # Initialize data with current config values
     config = safe_load_config()
-    latest_data['target_angle'] = config.get('SETPOINT', 0.0)
+    latest_data['target_angle'] = config.get('target_angle', 0.0)  # Use target_angle instead of SETPOINT
     
     # Start data sending thread
     data_thread = threading.Thread(target=send_data, daemon=True)
@@ -953,15 +1073,39 @@ def update_angle_data(roll, output, angular_velocity=0):
     output = float(output) if output is not None else 0.0
     angular_velocity = float(angular_velocity) if angular_velocity is not None else 0.0
     
+    # Track time delta for I term calculation
+    current_time = time.time()
+    dt = current_time - latest_data.get('timestamp', current_time)
+    
+    # Calculate error (target - current)
+    error = latest_data.get('target_angle', 0) - roll
+    
+    # Approximate I term by accumulating error over time (if we have a previous i_term)
+    if 'pid' in latest_data and 'i_term' in latest_data['pid']:
+        # Get I gain from config
+        i_gain = config.get('I_GAIN', 0.1)
+        # Calculate I term based on accumulated error
+        i_term = latest_data['pid']['i_term'] + (i_gain * error * dt)
+        # Apply rudimentary anti-windup (limit the I term)
+        max_i = config.get('MAX_I_TERM', 20.0)
+        i_term = max(-max_i, min(i_term, max_i))
+    else:
+        # If no previous I term, start with a simple approximation
+        i_term = config.get('I_GAIN', 0.1) * error
+    
+    # Calculate P and D terms
+    p_term = float(config.get('P_GAIN', 0) * roll)
+    d_term = float(config.get('D_GAIN', 0) * angular_velocity)
+    
     # Update latest data
     latest_data.update({
-        'timestamp': float(time.time()),
+        'timestamp': current_time,
         'angle': roll,
         'output': output,
         'pid': {
-            'p_term': float(config.get('P_GAIN', 0) * roll),  # Approximate P term
-            'i_term': 0.0,  # We don't have access to I term directly
-            'd_term': float(config.get('D_GAIN', 0) * angular_velocity)  # Approximate D term
+            'p_term': p_term,
+            'i_term': i_term,
+            'd_term': d_term
         }
     })
 
