@@ -56,7 +56,7 @@ def web_dashboard_mode(balance_controller):
     # Start the web server
     ip_address = get_local_ip()
     port = 8080
-    web_dashboard.start_server(host='0.0.0.0', port=port)
+    web_dashboard.start_server(port=port)
     
     # Only print the URL once with clear formatting
     print(f"\n\033[1mWeb dashboard available at: http://{ip_address}:{port}\033[0m")
