@@ -150,6 +150,7 @@ HTML_TEMPLATE = """
             text-align: center;
             margin-top: 15px;
             margin-bottom: 40px; /* Added space between charts and controls */
+            padding-top: 15px; /* Add padding to move reset button down */
         }
         .control-panel {
             display: grid;
@@ -402,7 +403,7 @@ HTML_TEMPLATE = """
             
             <div class="manual-target">
                 <label for="target-angle">Set Target Angle:</label>
-                <input type="number" id="target-angle" value="{{ target_angle }}" step="0.5" min="-10" max="10">
+                <input type="number" id="target-angle" value="{{ target_angle }}" step="0.5" min="-3" max="3">
                 <button id="set-target" class="action-button">Set</button>
             </div>
         </div>
@@ -744,8 +745,8 @@ HTML_TEMPLATE = """
             knob.style.top = `${newY}px`;
             
             // Calculate angle control value (only using Y-axis)
-            // Normalize to -10 to 10 degrees
-            const normalizedY = ((newY - centerY) / radius) * -10;
+            // Normalize to -3 to 3 degrees (changed from -10 to 10)
+            const normalizedY = ((newY - centerY) / radius) * -3;
             
             // Update target angle if enough time has passed
             const now = Date.now();
@@ -784,8 +785,8 @@ HTML_TEMPLATE = """
         });
         
         function updateTargetAngle(angle) {
-            // Limit angle to -10 to 10 degrees
-            angle = Math.max(-10, Math.min(10, angle));
+            // Limit angle to -3 to 3 degrees (changed from -10 to 10)
+            angle = Math.max(-3, Math.min(3, angle));
             
             // Round to 1 decimal place for display
             const roundedAngle = Math.round(angle * 10) / 10;
