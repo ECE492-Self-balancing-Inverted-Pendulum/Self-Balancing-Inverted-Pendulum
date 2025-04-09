@@ -403,7 +403,7 @@ HTML_TEMPLATE = """
             
             <div class="manual-target">
                 <label for="target-angle">Set Target Angle:</label>
-                <input type="number" id="target-angle" value="{{ target_angle }}" step="0.5" min="-1" max="1">
+                <input type="number" id="target-angle" value="{{ target_angle }}" step="0.5" min="-5" max="5">
                 <button id="set-target" class="action-button">Set</button>
             </div>
         </div>
@@ -745,13 +745,21 @@ HTML_TEMPLATE = """
             knob.style.top = `${newY}px`;
             
             // Calculate angle control value (only using Y-axis)
-            // Normalize to -1 to 1 degrees (changed from -10 to 10)
-            const normalizedY = ((newY - centerY) / radius) * -1;
+            // Normalize to -1.5 to 1.5 degrees (changed from -10 to 10)
+            const normalizedY = ((newY - centerY) / radius) * -1.5;
+            
+            // Calculate X-axis value for wheel differential control
+            // Normalize to -1 to 1 for wheel differential
+            const normalizedX = ((newX - centerX) / radius);
             
             // Update target angle if enough time has passed
             const now = Date.now();
             if (now - lastTargetUpdate > TARGET_UPDATE_INTERVAL) {
-                updateTargetAngle(normalizedY);
+                updateTargetAngle(normalizedY, true);
+                
+                // Send wheel differential command based on X-axis
+                updateWheelDifferential(normalizedX);
+                
                 lastTargetUpdate = now;
             }
         }
@@ -771,12 +779,33 @@ HTML_TEMPLATE = """
             }, 200);
             
             // Reset target angle to 0
-            updateTargetAngle(0);
+            updateTargetAngle(0, true);
+            
+            // Reset wheel differential
+            updateWheelDifferential(0);
+        }
+        
+        // Function to update wheel differential based on joystick X position
+        function updateWheelDifferential(xValue) {
+            // Only apply differential if significant movement
+            if (Math.abs(xValue) < 0.05) {
+                xValue = 0;
+            }
+            
+            // Send wheel differential command to server
+            socket.emit('update_wheel_differential', {
+                value: xValue
+            }, function(response) {
+                if (response && !response.success) {
+                    showNotification('Failed to update wheel differential: ' + 
+                        (response.error ? response.error : 'Unknown error'), false);
+                }
+            });
         }
         
         // Reset target angle button
         document.getElementById('reset-target').addEventListener('click', function() {
-            updateTargetAngle(0);
+            updateTargetAngle(0, true);
         });
         
         document.getElementById('set-target').addEventListener('click', function() {
@@ -784,9 +813,13 @@ HTML_TEMPLATE = """
             updateTargetAngle(targetAngle);
         });
         
-        function updateTargetAngle(angle) {
-            // Limit angle to -1 to 1 degrees (changed from -10 to 10)
-            angle = Math.max(-1, Math.min(1, angle));
+        function updateTargetAngle(angle, fromJoystick = false) {
+            // Limit angle based on source: joystick (-1.5 to 1.5 degrees) or manual input (-5 to 5 degrees)
+            if (fromJoystick) {
+                angle = Math.max(-1.5, Math.min(1.5, angle));
+            } else {
+                angle = Math.max(-5, Math.min(5, angle));
+            }
             
             // Round to 1 decimal place for display
             const roundedAngle = Math.round(angle * 10) / 10;
@@ -979,6 +1012,50 @@ def handle_target_angle_update(data):
         print(f"❌ Error updating target angle: {e}, Type: {type(e)}")
         import traceback
         traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
+@socketio.on('update_wheel_differential')
+def handle_wheel_differential(data):
+    """Handle wheel differential control from joystick X-axis."""
+    try:
+        # Get the x-axis value (-1 to 1)
+        x_value = float(data.get('value', 0))
+        
+        # Calculate differential power (25 PWM max)
+        differential_power = abs(x_value) * 25
+        
+        # Determine which wheel gets the power based on direction
+        if x_value > 0:
+            # Positive X is right movement - apply to right wheel
+            left_power = 0
+            right_power = differential_power
+        elif x_value < 0:
+            # Negative X is left movement - apply to left wheel
+            left_power = differential_power
+            right_power = 0
+        else:
+            # Centered - no differential
+            left_power = 0
+            right_power = 0
+        
+        # Store values for debug/display
+        latest_data['wheel_differential'] = {
+            'x_value': x_value,
+            'left_power': left_power,
+            'right_power': right_power
+        }
+        
+        # Update global variable to indicate differential control is active
+        # This will be checked by the balance controller
+        latest_data['differential_active'] = (left_power > 0 or right_power > 0)
+        latest_data['left_wheel_power'] = left_power
+        latest_data['right_wheel_power'] = right_power
+        
+        print(f"🎮 Wheel differential: x={x_value:.2f}, L={left_power:.1f}, R={right_power:.1f}")
+        
+        return {'success': True}
+    except Exception as e:
+        print(f"❌ Error updating wheel differential: {e}")
         return {'success': False, 'error': str(e)}
 
 def send_data():
