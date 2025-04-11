@@ -341,6 +341,39 @@ HTML_TEMPLATE = """
         .error-notification {
             background-color: #f44336;
         }
+        /* Add joystick range control styles */
+        .joystick-range-controls {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .range-control {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .range-control label {
+            width: 120px;
+            font-weight: 500;
+        }
+        .range-control input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .range-button {
+            padding: 5px 10px;
+            margin-top: 5px;
+            background-color: #3498db;
+            font-size: 12px;
+        }
+        .range-button:hover {
+            background-color: #2980b9;
+        }
     </style>
 </head>
 <body>
@@ -388,6 +421,19 @@ HTML_TEMPLATE = """
             <h2>Target Angle Control</h2>
             <div class="target-angle-display">
                 <span>Current Target Angle: <span id="current-target">{{ target_angle }}</span>°</span>
+            </div>
+            
+            <!-- Joystick range controls -->
+            <div class="joystick-range-controls">
+                <div class="range-control">
+                    <label for="joystick-min">Joystick Min (°):</label>
+                    <input type="number" id="joystick-min" value="-1.5" step="0.5" min="-10" max="0">
+                </div>
+                <div class="range-control">
+                    <label for="joystick-max">Joystick Max (°):</label>
+                    <input type="number" id="joystick-max" value="1.5" step="0.5" min="0" max="10">
+                </div>
+                <button id="update-joystick-range" class="range-button">Update Range</button>
             </div>
             
             <!-- Joystick control for direction -->
@@ -686,6 +732,33 @@ HTML_TEMPLATE = """
         let centerY = joystick.offsetHeight / 2;
         const radius = joystick.offsetWidth / 2 - knob.offsetWidth / 2;
         
+        // Joystick range settings (default values)
+        let joystickMinAngle = -1.5;
+        let joystickMaxAngle = 1.5;
+        
+        // Update joystick range from inputs
+        document.getElementById('update-joystick-range').addEventListener('click', function() {
+            const minValue = parseFloat(document.getElementById('joystick-min').value);
+            const maxValue = parseFloat(document.getElementById('joystick-max').value);
+            
+            // Validate inputs
+            if (isNaN(minValue) || isNaN(maxValue)) {
+                showNotification('Please enter valid numbers for min and max values', false);
+                return;
+            }
+            
+            if (minValue >= maxValue) {
+                showNotification('Min value must be less than max value', false);
+                return;
+            }
+            
+            // Update joystick range
+            joystickMinAngle = minValue;
+            joystickMaxAngle = maxValue;
+            
+            showNotification(`Joystick range updated: ${joystickMinAngle}° to ${joystickMaxAngle}°`, true);
+        });
+        
         // Initialize knob at center
         knob.style.left = `${centerX}px`;
         knob.style.top = `${centerY}px`;
@@ -745,8 +818,9 @@ HTML_TEMPLATE = """
             knob.style.top = `${newY}px`;
             
             // Calculate angle control value (only using Y-axis)
-            // Normalize to -1.5 to 1.5 degrees (changed from -10 to 10)
-            const normalizedY = ((newY - centerY) / radius) * -1.5;
+            // Map from -1 to 1 to the custom range (joystickMinAngle to joystickMaxAngle)
+            const normalizedY = ((newY - centerY) / radius) * -1;
+            const mappedAngle = normalizedY * (joystickMaxAngle - joystickMinAngle) / 2 + (joystickMaxAngle + joystickMinAngle) / 2;
             
             // Calculate X-axis value for wheel differential control
             // Normalize to -1 to 1 for wheel differential
@@ -755,7 +829,7 @@ HTML_TEMPLATE = """
             // Update target angle if enough time has passed
             const now = Date.now();
             if (now - lastTargetUpdate > TARGET_UPDATE_INTERVAL) {
-                updateTargetAngle(normalizedY, true);
+                updateTargetAngle(mappedAngle, true);
                 
                 // Send wheel differential command based on X-axis
                 updateWheelDifferential(normalizedX);
@@ -814,10 +888,12 @@ HTML_TEMPLATE = """
         });
         
         function updateTargetAngle(angle, fromJoystick = false) {
-            // Limit angle based on source: joystick (-1.5 to 1.5 degrees) or manual input (-5 to 5 degrees)
+            // Limit angle based on source: joystick or manual input (-5 to 5 degrees)
             if (fromJoystick) {
-                angle = Math.max(-1.5, Math.min(1.5, angle));
+                // Use the custom range for joystick
+                angle = Math.max(joystickMinAngle, Math.min(joystickMaxAngle, angle));
             } else {
+                // Keep the manual range as before
                 angle = Math.max(-5, Math.min(5, angle));
             }
             
