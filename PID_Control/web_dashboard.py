@@ -433,6 +433,10 @@ HTML_TEMPLATE = """
                     <label for="joystick-max">Joystick Max (°):</label>
                     <input type="number" id="joystick-max" value="1.5" step="0.5" min="0" max="10">
                 </div>
+                <div class="range-control">
+                    <label for="joystick-middle">Joystick Middle (°):</label>
+                    <input type="number" id="joystick-middle" value="0" step="0.5" min="-5" max="5">
+                </div>
                 <button id="update-joystick-range" class="range-button">Update Range</button>
             </div>
             
@@ -735,15 +739,17 @@ HTML_TEMPLATE = """
         // Joystick range settings (default values)
         let joystickMinAngle = -1.5;
         let joystickMaxAngle = 1.5;
+        let joystickMiddleAngle = 0;
         
         // Update joystick range from inputs
         document.getElementById('update-joystick-range').addEventListener('click', function() {
             const minValue = parseFloat(document.getElementById('joystick-min').value);
             const maxValue = parseFloat(document.getElementById('joystick-max').value);
+            const middleValue = parseFloat(document.getElementById('joystick-middle').value);
             
             // Validate inputs
-            if (isNaN(minValue) || isNaN(maxValue)) {
-                showNotification('Please enter valid numbers for min and max values', false);
+            if (isNaN(minValue) || isNaN(maxValue) || isNaN(middleValue)) {
+                showNotification('Please enter valid numbers for all values', false);
                 return;
             }
             
@@ -752,11 +758,17 @@ HTML_TEMPLATE = """
                 return;
             }
             
+            if (middleValue < minValue || middleValue > maxValue) {
+                showNotification('Middle value must be between min and max values', false);
+                return;
+            }
+            
             // Update joystick range
             joystickMinAngle = minValue;
             joystickMaxAngle = maxValue;
+            joystickMiddleAngle = middleValue;
             
-            showNotification(`Joystick range updated: ${joystickMinAngle}° to ${joystickMaxAngle}°`, true);
+            showNotification(`Joystick range updated: ${joystickMinAngle}° to ${joystickMaxAngle}°, middle: ${joystickMiddleAngle}°`, true);
         });
         
         // Initialize knob at center
@@ -818,9 +830,21 @@ HTML_TEMPLATE = """
             knob.style.top = `${newY}px`;
             
             // Calculate angle control value (only using Y-axis)
-            // Map from -1 to 1 to the custom range (joystickMinAngle to joystickMaxAngle)
+            // Map from -1 to 1 based on the Y position
             const normalizedY = ((newY - centerY) / radius) * -1;
-            const mappedAngle = normalizedY * (joystickMaxAngle - joystickMinAngle) / 2 + (joystickMaxAngle + joystickMinAngle) / 2;
+            
+            // Map the normalized Y position to the angle range:
+            // When normalizedY is -1, output should be joystickMinAngle
+            // When normalizedY is 0, output should be joystickMiddleAngle
+            // When normalizedY is 1, output should be joystickMaxAngle
+            let mappedAngle;
+            if (normalizedY >= 0) {
+                // Map from 0 to 1 to middleAngle to maxAngle
+                mappedAngle = joystickMiddleAngle + normalizedY * (joystickMaxAngle - joystickMiddleAngle);
+            } else {
+                // Map from -1 to 0 to minAngle to middleAngle
+                mappedAngle = joystickMiddleAngle + normalizedY * (joystickMiddleAngle - joystickMinAngle);
+            }
             
             // Calculate X-axis value for wheel differential control
             // Normalize to -1 to 1 for wheel differential
@@ -852,8 +876,8 @@ HTML_TEMPLATE = """
                 knob.style.transition = '';
             }, 200);
             
-            // Reset target angle to 0
-            updateTargetAngle(0, true);
+            // Reset target angle to the middle value instead of 0
+            updateTargetAngle(joystickMiddleAngle, true);
             
             // Reset wheel differential
             updateWheelDifferential(0);
@@ -879,7 +903,7 @@ HTML_TEMPLATE = """
         
         // Reset target angle button
         document.getElementById('reset-target').addEventListener('click', function() {
-            updateTargetAngle(0, true);
+            updateTargetAngle(joystickMiddleAngle, true);
         });
         
         document.getElementById('set-target').addEventListener('click', function() {
